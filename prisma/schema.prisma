@@ -1,0 +1,323 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── ENUMS ─────────────────────────────────────────
+
+enum UserRole {
+  CLIENT_ADMIN
+  CLIENT_USER
+  THREESC_ADMIN
+  THREESC_LEAD
+  THREESC_AGENT
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+}
+
+enum MilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  DELAYED
+}
+
+enum IssueCategory {
+  BUG
+  FEATURE_REQUEST
+  DELIVERY
+  BILLING
+  GENERAL
+  TECHNICAL
+}
+
+enum IssuePriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IssueStatus {
+  OPEN
+  ACKNOWLEDGED
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum NotificationType {
+  ISSUE_ASSIGNED
+  STATUS_UPDATED
+  SLA_WARNING
+  ESCALATION
+  NEW_COMMENT
+  ISSUE_RESOLVED
+}
+
+enum SummaryType {
+  WEEKLY
+  MONTHLY
+}
+
+// ── TABLES ────────────────────────────────────────
+
+model User {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  password    String
+  role        UserRole
+  avatarUrl   String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  clientMembers    ClientMember[]
+  raisedIssues     Issue[]          @relation("RaisedBy")
+  assignedIssues   Issue[]          @relation("AssignedTo")
+  escalatedIssues  Issue[]          @relation("EscalatedTo")
+  comments         Comment[]
+  notifications    Notification[]
+  issueHistory     IssueHistory[]
+  knowledgeBase    KnowledgeBase[]
+  createdProjects  Project[]        @relation("CreatedBy")
+  ledProjects      Project[]        @relation("AssignedLead")
+}
+
+model Client {
+  id            String    @id @default(cuid())
+  name          String
+  logoUrl       String?
+  industry      String?
+  contractStart DateTime?
+  contractEnd   DateTime?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  members       ClientMember[]
+  projects      Project[]
+  issues        Issue[]
+  knowledgeBase KnowledgeBase[]
+  summaries     Summary[]
+}
+
+model ClientMember {
+  id        String   @id @default(cuid())
+  clientId  String
+  userId    String
+  joinedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  // Relations
+  client    Client   @relation(fields: [clientId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Project {
+  id            String        @id @default(cuid())
+  clientId      String
+  name          String
+  description   String?
+  status        ProjectStatus @default(ACTIVE)
+  startDate     DateTime?
+  endDate       DateTime?
+  assignedLead  String?       // 3SC Lead user id
+  createdBy     String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  client        Client        @relation(fields: [clientId], references: [id])
+  lead          User?         @relation("AssignedLead", fields: [assignedLead], references: [id])
+  creator       User          @relation("CreatedBy", fields: [createdBy], references: [id])
+  milestones    Milestone[]
+  issues        Issue[]
+  summaries     Summary[]
+}
+
+model Milestone {
+  id          String          @id @default(cuid())
+  projectId   String
+  title       String
+  description String?
+  dueDate     DateTime?
+  status      MilestoneStatus @default(PENDING)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  // Relations
+  project     Project         @relation(fields: [projectId], references: [id])
+}
+
+model SlaPolicy {
+  id             String        @id @default(cuid())
+  priority       IssuePriority @unique
+  responseTime   Int           // in hours
+  resolutionTime Int           // in hours
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model Issue {
+  id               String        @id @default(cuid())
+  title            String
+  description      String
+  category         IssueCategory @default(GENERAL)
+  priority         IssuePriority @default(MEDIUM)
+  status           IssueStatus   @default(OPEN)
+  clientId         String
+  projectId        String?
+  raisedById       String
+  assignedToId     String?
+
+  // AI Fields
+  aiCategory       String?
+  aiPriority       String?
+  aiSuggestedAgent String?
+  aiSummary        String?
+
+  // SLA Fields
+  slaDueAt         DateTime?
+  slaBreached      Boolean   @default(false)
+  slaBreachRisk    Boolean   @default(false)
+  escalated        Boolean   @default(false)
+  escalatedAt      DateTime?
+  escalatedToId    String?
+
+  resolvedAt       DateTime?
+  closedAt         DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Relations
+  client           Client          @relation(fields: [clientId], references: [id])
+  project          Project?        @relation(fields: [projectId], references: [id])
+  raisedBy         User            @relation("RaisedBy", fields: [raisedById], references: [id])
+  assignedTo       User?           @relation("AssignedTo", fields: [assignedToId], references: [id])
+  escalatedTo      User?           @relation("EscalatedTo", fields: [escalatedToId], references: [id])
+  attachments      IssueAttachment[]
+  comments         Comment[]       // includes internal notes (isInternal = true)
+  history          IssueHistory[]
+  notifications    Notification[]
+}
+
+model IssueAttachment {
+  id         String   @id @default(cuid())
+  issueId    String
+  uploadedBy String
+  fileName   String
+  fileUrl    String
+  fileSize   Int?
+  fileType   String?
+  createdAt  DateTime @default(now())
+
+  // Relations
+  issue      Issue    @relation(fields: [issueId], references: [id])
+}
+
+model Comment {
+  id            String   @id @default(cuid())
+  issueId       String
+  authorId      String
+  content       String
+  isInternal    Boolean  @default(false) // true = internal note (3SC only)
+  isAiSuggested Boolean  @default(false)
+  parentId      String?                  // threaded replies
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  issue         Issue     @relation(fields: [issueId], references: [id])
+  author        User      @relation(fields: [authorId], references: [id])
+  parent        Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies       Comment[] @relation("CommentReplies")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  issueId   String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  // Relations
+  user      User             @relation(fields: [userId], references: [id])
+  issue     Issue?           @relation(fields: [issueId], references: [id])
+}
+
+model IssueHistory {
+  id           String   @id @default(cuid())
+  issueId      String
+  changedById  String
+  fieldChanged String
+  oldValue     String?
+  newValue     String?
+  createdAt    DateTime @default(now())
+
+  // Relations
+  issue        Issue    @relation(fields: [issueId], references: [id])
+  changedBy    User     @relation(fields: [changedById], references: [id])
+}
+
+model KnowledgeBase {
+  id          String   @id @default(cuid())
+  title       String
+  content     String
+  category    String?
+  clientId    String?            // NULL = global, set = client-specific
+  createdById String
+  isPublished Boolean  @default(false)
+  isInternal  Boolean  @default(false) // true = 3SC only, false = client-facing
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  client      Client?  @relation(fields: [clientId], references: [id])
+  createdBy   User     @relation(fields: [createdById], references: [id])
+}
+
+model Summary {
+  id            String      @id @default(cuid())
+  clientId      String
+  projectId     String?
+  periodStart   DateTime
+  periodEnd     DateTime
+  type          SummaryType
+  content       String
+  generatedByAi Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+
+  // Relations
+  client        Client      @relation(fields: [clientId], references: [id])
+  project       Project?    @relation(fields: [projectId], references: [id])
+}
