@@ -9,6 +9,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const session = await getServerSession(authOptions);
     const { id: idOrKey } = await params;
     const id = await resolveTicketId(idOrKey);
     if (!id) return NextResponse.json({ error: "Ticket not found" }, { status: 404 });

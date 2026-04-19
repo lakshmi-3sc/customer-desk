@@ -144,7 +144,7 @@ export default function LeadReportsPage() {
                         <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} />
                         <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} tickLine={false} width={90} />
                         <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }}
-                          formatter={(v: number, name: string) => [`${v}`, name]} />
+                          formatter={(v, name) => [`${v}`, `${name}`]} />
                         <Legend wrapperStyle={{ fontSize: 11 }} />
                         <Bar dataKey="compliant" fill="#10b981" name="Compliant" stackId="a" radius={[0, 3, 3, 0]} />
                         <Bar dataKey="breached" fill="#ef4444" name="Breached" stackId="a" radius={[0, 3, 3, 0]} />
@@ -163,7 +163,7 @@ export default function LeadReportsPage() {
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
                       <XAxis dataKey="week" tick={{ fontSize: 10 }} tickLine={false} />
                       <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                      <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: number) => [`${v}h`, "Avg Resolution"]} />
+                      <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v) => [`${v}h`, "Avg Resolution"]} />
                       <Line type="monotone" dataKey="avgHrs" stroke="#8b5cf6" strokeWidth={2.5} dot={false} name="Avg Hrs" />
                     </LineChart>
                   </ResponsiveContainer>
@@ -179,7 +179,7 @@ export default function LeadReportsPage() {
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
                       <XAxis dataKey="week" tick={{ fontSize: 10 }} tickLine={false} />
                       <YAxis domain={[60, 100]} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                      <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: number) => [`${v}%`]} />
+                      <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v) => [`${v}%`]} />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
                       <Line type="monotone" dataKey="csat" stroke="#10b981" strokeWidth={2.5} dot={false} name="CSAT %" />
                       <Line type="monotone" dataKey="target" stroke="#f59e0b" strokeDasharray="4 4" strokeWidth={1.5} dot={false} name="Target" />

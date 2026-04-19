@@ -231,8 +231,8 @@ export default function ReportsPage() {
                         paddingAngle={3}
                         dataKey="count"
                         nameKey="priority"
-                        label={({ priority, percent }) =>
-                          `${priority} ${(percent * 100).toFixed(0)}%`
+                        label={({ name, percent }) =>
+                          `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
                         }
                         labelLine={false}
                       >

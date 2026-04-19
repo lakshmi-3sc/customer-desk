@@ -17,8 +17,8 @@ export async function GET(request: Request) {
   // Use IssueHistory as audit trail source
   const history = await prisma.issueHistory.findMany({
     where: {
-      ...(dateFrom && { changedAt: { gte: new Date(dateFrom) } }),
-      ...(dateTo && { changedAt: { lte: new Date(dateTo + 'T23:59:59') } }),
+      ...(dateFrom && { createdAt: { gte: new Date(dateFrom) } }),
+      ...(dateTo && { createdAt: { lte: new Date(dateTo + 'T23:59:59') } }),
       ...(actorId && { changedById: actorId }),
     },
     include: {

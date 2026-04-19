@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import type { IssueCategory } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
   const issues = await prisma.issue.findMany({
     where: {
       status: { in: ["RESOLVED", "CLOSED"] },
-      ...(category ? { category } : {}),
+      ...(category ? { category: category as IssueCategory } : {}),
       ...(search
         ? {
             OR: [
