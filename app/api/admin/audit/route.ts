@@ -25,7 +25,7 @@ export async function GET(request: Request) {
       changedBy: { select: { id: true, name: true, role: true } },
       issue: { select: { ticketKey: true, title: true, id: true } },
     },
-    orderBy: { changedAt: 'desc' },
+    orderBy: { createdAt: 'desc' },
     take: 200,
   });
 
