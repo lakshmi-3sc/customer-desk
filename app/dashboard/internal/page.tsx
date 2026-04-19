@@ -1,491 +1,402 @@
-"use client";
+﻿"use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   TrendingUp,
   AlertCircle,
   CheckCircle,
   Clock,
-  BarChart3,
+  AlertTriangle,
   Zap,
-  LogOut,
+  ArrowUpRight,
+  RefreshCw,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
+import { AppSidebar } from "@/components/app-sidebar";
+import { TopBar } from "@/components/top-bar";
+import { getSocket } from "@/lib/socket-client";
 
-// Mock API Response Structure for Internal Dashboard
-const mockInternalDashboardData = {
-  header: {
-    greeting: "Good morning, Ray Chen",
-    lastUpdate: "Last updated 5 mins ago",
-    company: "Acme Logistics",
-    service: "3SC Connect",
+const mockAiInsights = [
+  {
+    id: 1,
+    title: "5 tickets pending customer response — auto-reminder sent",
+    type: "suggestion",
+    icon: Zap,
   },
-  metrics: [
-    {
-      label: "Open issues",
-      value: 7,
-      color: "text-red-600",
-      bgColor: "bg-red-50",
-      icon: AlertCircle,
-    },
-    {
-      label: "In progress",
-      value: 5,
-      subtext: "avg 15 days",
-      color: "text-orange-600",
-      bgColor: "bg-orange-50",
-      icon: Clock,
-    },
-    {
-      label: "Resolved",
-      value: 42,
-      color: "text-green-600",
-      bgColor: "bg-green-50",
-      icon: CheckCircle,
-    },
-    {
-      label: "CSAI score",
-      value: 4.6,
-      subtext: "out of 5",
-      color: "text-blue-600",
-      bgColor: "bg-blue-50",
-      icon: BarChart3,
-    },
-  ],
-  aiInsights: [
-    {
-      id: 1,
-      title: "5 tickets pending customer response - auto-reminder sent",
-      type: "suggestion",
-      icon: Zap,
-    },
-    {
-      id: 2,
-      title: "3 SLA breaches detected. Escalation protocols activated",
-      type: "critical",
-      icon: AlertCircle,
-    },
-    {
-      id: 3,
-      title: "Predicted team capacity: 95 new tickets can be assigned today",
-      type: "info",
-      icon: TrendingUp,
-    },
-  ],
-  activeIssues: [
-    { count: 42, label: "All" },
-    { count: 12, label: "Open" },
-    { count: 8, label: "In progress" },
-    { count: 3, label: "Critical" },
-  ],
-  teamCapacity: {
-    agents: { current: 8, total: 10, status: "success" },
-    leads: { current: 2, total: 3, status: "success" },
-    admins: { current: 1, total: 1, status: "success" },
+  {
+    id: 2,
+    title: "3 SLA breaches detected. Escalation protocols activated",
+    type: "critical",
+    icon: AlertCircle,
   },
-  performanceTrend: [
-    { month: "Oct", value: 65 },
-    { month: "Nov", value: 72 },
-    { month: "Dec", value: 68 },
-    { month: "Jan", value: 75 },
-    { month: "Feb", value: 82 },
-    { month: "Mar", value: 88 },
-  ],
-};
+  {
+    id: 3,
+    title: "Predicted team capacity: 95 new tickets can be assigned today",
+    type: "info",
+    icon: TrendingUp,
+  },
+];
 
-// Helper function to convert API data to metrics format
 function getApiBasedMetrics(kpiData: any) {
   return [
     {
-      label: "Open tickets",
-      value: kpiData.openTickets || 0,
-      color: "text-red-600",
-      bgColor: "bg-red-50",
+      label: "Open Tickets",
+      value: kpiData.openTickets ?? 0,
+      delta: null,
+      color: "text-red-600 dark:text-red-400",
+      border: "border-l-red-500",
       icon: AlertCircle,
+      route: "/tickets?status=OPEN",
     },
     {
-      label: "In progress",
-      value: kpiData.inProgressTickets || 0,
-      subtext: `${Math.round(kpiData.avgResolutionTime || 0)} days avg`,
-      color: "text-orange-600",
-      bgColor: "bg-orange-50",
+      label: "In Progress",
+      value: kpiData.inProgressTickets ?? 0,
+      delta: `${Math.round(kpiData.avgResolutionTime ?? 0)}d avg`,
+      color: "text-amber-600 dark:text-amber-400",
+      border: "border-l-amber-500",
       icon: Clock,
+      route: "/tickets?status=IN_PROGRESS",
     },
     {
       label: "Resolved",
-      value: kpiData.resolvedTickets || 0,
-      color: "text-green-600",
-      bgColor: "bg-green-50",
+      value: kpiData.resolvedTickets ?? 0,
+      delta: null,
+      color: "text-emerald-600 dark:text-emerald-400",
+      border: "border-l-emerald-500",
       icon: CheckCircle,
+      route: "/tickets?status=RESOLVED",
     },
     {
-      label: "Team efficiency",
-      value: `${kpiData.teamEfficiencyScore || 0}%`,
-      subtext: "score",
-      color: "text-blue-600",
-      bgColor: "bg-blue-50",
-      icon: BarChart3,
+      label: "SLA Breaches",
+      value: kpiData.slaBreachedCount ?? 0,
+      delta: `${kpiData.slaBreachRiskCount ?? 0} at risk`,
+      color: "text-red-600 dark:text-red-400",
+      border: "border-l-red-500",
+      icon: AlertTriangle,
+      route: null,
     },
   ];
 }
 
+function generateTicketKey(project: { name: string } | null, ticketId: string): string {
+  if (!project) return `TKT-${ticketId.slice(0, 8).toUpperCase()}`;
+  const projectKey = project.name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 4);
+  const hash = ticketId
+    .split("")
+    .reduce((acc, char) => ((acc << 5) - acc) + char.charCodeAt(0), 0);
+  return `${projectKey}-${Math.abs(hash % 9999) + 1000}`;
+}
+
+function StatusLozenge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    OPEN: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+    IN_PROGRESS: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+    RESOLVED: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
+    ACKNOWLEDGED: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300",
+    CLOSED: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
+  };
+  const cls = map[status] ?? map.CLOSED;
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${cls}`}>
+      {status.replace("_", " ")}
+    </span>
+  );
+}
+
+function PriorityDot({ priority }: { priority: string }) {
+  const map: Record<string, string> = {
+    CRITICAL: "bg-red-500",
+    HIGH: "bg-orange-500",
+    MEDIUM: "bg-yellow-400",
+    LOW: "bg-blue-400",
+  };
+  return (
+    <span
+      className={`inline-block w-2.5 h-2.5 rounded-full ${map[priority?.toUpperCase()] ?? "bg-slate-400"}`}
+      title={priority}
+    />
+  );
+}
+
 export default function InternalDashboard() {
   const { data: session } = useSession();
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [kpiData, setKpiData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Fetch KPI data from API
-  useEffect(() => {
-    const fetchKPIData = async () => {
-      try {
-        const response = await fetch("/api/dashboard/kpi");
-        if (response.ok) {
-          const data = await response.json();
-          setKpiData(data.metrics);
-        }
-      } catch (error) {
-        console.error("Failed to fetch KPI data:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchKPIData();
-  }, []);
-
-  // Get user initials for avatar
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return "U";
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  };
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsDropdownOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950">
-      {/* Header */}
-      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm flex-shrink-0">
-        <div className="px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-cyan-600 dark:bg-cyan-500 rounded flex items-center justify-center text-white font-bold text-sm">
-              3S
-            </div>
-            <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">
-              3SC Internal
-            </h1>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="relative" ref={dropdownRef}>
-              <button
-                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className="w-10 h-10 bg-blue-600 dark:bg-blue-500 rounded-full flex items-center justify-center text-white font-bold hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors cursor-pointer"
-              >
-                {getInitials(session?.user?.name)}
-              </button>
-              {isDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 z-50">
-                  <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
-                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                      {session?.user?.name || "Team Member"}
-                    </p>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                      {session?.user?.role}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setIsDropdownOpen(false);
-                      signOut({ callbackUrl: "/login" });
-                    }}
-                    className="w-full px-4 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2 transition-colors"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    Sign Out
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <Main
-        kpiData={kpiData}
-        getApiBasedMetrics={getApiBasedMetrics}
-        loading={loading}
-      />
-    </div>
-  );
-}
-
-function SkeletonCard() {
-  return (
-    <Card className="bg-slate-100 dark:bg-slate-800/50 border-0 dark:border-slate-800 shadow-none">
-      <CardContent className="p-6">
-        <div className="animate-pulse">
-          <div className="h-4 bg-slate-300 dark:bg-slate-700 rounded w-20 mb-4"></div>
-          <div className="h-10 bg-slate-300 dark:bg-slate-700 rounded w-16"></div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function Main({
-  kpiData,
-  getApiBasedMetrics,
-  loading,
-}: {
-  kpiData: any;
-  getApiBasedMetrics: (data: any) => any;
-  loading: boolean;
-}) {
   const router = useRouter();
+  const [kpiData, setKpiData] = useState<any>(null);
+  const [kpiLoading, setKpiLoading] = useState(true);
   const [tickets, setTickets] = useState<any[]>([]);
   const [ticketsLoading, setTicketsLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState(new Date());
 
-  // Fetch active (in progress) tickets with auto-refresh
-  useEffect(() => {
-    const fetchTickets = async () => {
-      try {
-        const response = await fetch("/api/dashboard/tickets?status=IN_PROGRESS", {
-          cache: "no-store",
-        });
-        if (response.ok) {
-          const data = await response.json();
-          // Sort by updatedAt in descending order (most recent first)
-          const sortedTickets = (data.tickets || []).sort(
-            (a: any, b: any) => 
-              new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-          );
-          setTickets(sortedTickets);
-        }
-      } catch (error) {
-        console.error("Failed to fetch tickets:", error);
-      } finally {
-        setTicketsLoading(false);
+  const fetchKPI = async () => {
+    try {
+      const res = await fetch("/api/dashboard/kpi");
+      if (res.ok) {
+        const data = await res.json();
+        setKpiData(data.metrics);
       }
-    };
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setKpiLoading(false);
+    }
+  };
 
+  const fetchTickets = async () => {
+    try {
+      const res = await fetch("/api/dashboard/tickets", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        const sorted = (data.tickets ?? [])
+          .sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+          .slice(0, 8);
+        setTickets(sorted);
+        setLastRefresh(new Date());
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setTicketsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchKPI();
     fetchTickets();
-
-    // Auto-refresh tickets every 30 seconds
     const interval = setInterval(fetchTickets, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  const getStatusColor = (status: string) => {
-    switch (status?.toUpperCase()) {
-      case "OPEN":
-        return "bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300";
-      case "IN_PROGRESS":
-        return "bg-yellow-100 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300";
-      case "RESOLVED":
-        return "bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300";
-      case "ACKNOWLEDGED":
-        return "bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300";
-      case "CLOSED":
-        return "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300";
-      default:
-        return "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300";
-    }
-  };
+  // Real-time updates via Socket.IO
+  useEffect(() => {
+    const socket = getSocket();
 
-  const getRouteForMetric = (label: string) => {
-    if (label.toLowerCase().includes("open")) {
-      return "/tickets?status=OPEN";
-    }
-    if (label.toLowerCase().includes("progress")) {
-      return "/tickets?status=IN_PROGRESS";
-    }
-    if (label.toLowerCase().includes("resolved")) {
-      return "/tickets?status=RESOLVED";
-    }
-    return null;
-  };
+    const joinRoom = () => socket.emit('join:tickets');
+    if (socket.connected) joinRoom();
+    socket.on('connect', joinRoom);
+
+    socket.on('ticket:updated', (updated: any) => {
+      setTickets((prev) =>
+        prev.some((t: any) => t.id === updated.id)
+          ? prev
+              .map((t: any) => (t.id === updated.id ? { ...t, ...updated } : t))
+              .sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+          : prev
+      );
+    });
+    return () => {
+      socket.off('connect', joinRoom);
+      socket.off('ticket:updated');
+    };
+  }, []);
+
+  const metrics = kpiData ? getApiBasedMetrics(kpiData) : null;
 
   return (
-    <main className="w-full flex-1 p-6 overflow-y-auto">
-      <div className="max-w-7xl mx-auto">
-        {/* Greeting Header */}
-        <div className="mb-6">
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            {mockInternalDashboardData.header.lastUpdate}
-          </p>
-        </div>
+    <div className="h-screen w-screen flex overflow-hidden bg-[#F4F5F7] dark:bg-slate-950">
+      <AppSidebar />
 
-        {/* Metrics Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {loading
-            ? Array.from({ length: 4 }).map((_, idx) => (
-                <SkeletonCard key={idx} />
-              ))
-            : kpiData
-              ? getApiBasedMetrics(kpiData).map((metric: any, idx: number) => {
-                  const Icon = metric.icon;
-                  const route = getRouteForMetric(metric.label);
-                  const darkBgColor = metric.bgColor
-                    .replace("bg-red-50", "dark:bg-red-950/30")
-                    .replace("bg-orange-50", "dark:bg-orange-950/30")
-                    .replace("bg-green-50", "dark:bg-green-950/30")
-                    .replace("bg-blue-50", "dark:bg-blue-950/30");
-                  const darkTextColor = metric.color
-                    .replace("text-red-600", "dark:text-red-400")
-                    .replace("text-orange-600", "dark:text-orange-400")
-                    .replace("text-green-600", "dark:text-green-400")
-                    .replace("text-blue-600", "dark:text-blue-400");
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top bar */}
+        <TopBar
+          left={
+            <div>
+              <h1 className="text-base font-semibold text-slate-900 dark:text-slate-100">Overview</h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {session?.user?.name ? `Welcome back, ${session.user.name.split(" ")[0]}` : "Internal Dashboard"}
+              </p>
+            </div>
+          }
+          right={
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => { fetchKPI(); fetchTickets(); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Refresh
+              </button>
+              <span className="text-xs text-slate-400 dark:text-slate-600">
+                {lastRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            </div>
+          }
+        />
 
-                  return (
-                    <Card
-                      key={idx}
-                      className={`${metric.bgColor} dark:bg-slate-900/50 border-0 dark:border-slate-800 shadow-none ${
-                        route
-                          ? "cursor-pointer hover:shadow-lg transition-shadow"
-                          : ""
-                      }`}
-                      onClick={() => route && router.push(route)}
-                    >
-                      <CardContent className="p-6">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">
-                              {metric.label}
-                            </p>
-                            <div className="flex items-baseline gap-2">
-                              <p
-                                className={`text-3xl font-bold ${metric.color} ${darkTextColor}`}
-                              >
-                                {metric.value}
-                              </p>
-                              {metric.subtext && (
-                                <p className="text-xs text-slate-500 dark:text-slate-400">
-                                  {metric.subtext}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          <Icon
-                            className={`${metric.color} ${darkTextColor} w-6 h-6 opacity-50`}
-                          />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })
-              : null}
-        </div>
+        {/* Content */}
+        <main className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-7xl mx-auto space-y-6">
 
-        {/* Main Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* AI Insights */}
-          <Card className="lg:col-span-2 dark:border-slate-800 dark:bg-slate-900">
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Zap className="w-5 h-5 text-yellow-500 dark:text-yellow-400" />
-                <CardTitle className="dark:text-slate-50">
-                  AI insights — today
-                </CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {mockInternalDashboardData.aiInsights.map((insight) => {
-                  const Icon = insight.icon;
-                  const bgColor =
-                    insight.type === "critical"
-                      ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900"
-                      : insight.type === "suggestion"
-                        ? "bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-900"
-                        : "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900";
-
-                  return (
-                    <div
-                      key={insight.id}
-                      className={`${bgColor} border rounded-lg p-3 text-sm`}
-                    >
-                      <div className="flex gap-3">
-                        <Icon className="w-4 h-4 mt-0.5 flex-shrink-0 text-slate-600 dark:text-slate-400" />
-                        <p className="text-slate-700 dark:text-slate-300">
-                          {insight.title}
-                        </p>
-                      </div>
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {kpiLoading
+                ? Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 border-l-4 border-l-slate-200 dark:border-l-slate-700 p-4 animate-pulse">
+                      <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-24 mb-3" />
+                      <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded w-16" />
                     </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Recent Tickets */}
-          <Card className="dark:border-slate-800 dark:bg-slate-900">
-            <CardHeader>
-              <CardTitle className="dark:text-slate-50 text-sm">
-                Recent Tickets
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {ticketsLoading ? (
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Loading tickets...
-                  </p>
-                ) : tickets.length === 0 ? (
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    No recent tickets
-                  </p>
-                ) : (
-                  tickets.map((ticket) => (
-                    <button
-                      key={ticket.id}
-                      onClick={() =>
-                        router.push(`/tickets/${ticket.id}`)
-                      }
-                      className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors text-left"
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
-                          #{ticket.id.split("-").pop()}
-                        </p>
-                        <Badge className={getStatusColor(ticket.status)}>
-                          {ticket.status}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-slate-600 dark:text-slate-400 truncate">
-                        {ticket.title}
-                      </p>
-                    </button>
                   ))
+                : metrics?.map((m, i) => {
+                    const Icon = m.icon;
+                    return (
+                      <div
+                        key={i}
+                        onClick={() => m.route && router.push(m.route)}
+                        className={`bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 border-l-4 ${m.border} p-4 ${m.route ? "cursor-pointer hover:shadow-md transition-shadow" : ""}`}
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                            {m.label}
+                          </p>
+                          <Icon className={`w-4 h-4 ${m.color} opacity-60`} />
+                        </div>
+                        <p className={`text-3xl font-bold ${m.color}`}>{m.value}</p>
+                        {m.delta && (
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{m.delta}</p>
+                        )}
+                      </div>
+                    );
+                  })}
+            </div>
+
+            {/* Main grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Recent Tickets Table */}
+              <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800">
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    Recently Updated Issues
+                  </h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => router.push("/tickets")}
+                    className="text-xs text-[#0052CC] dark:text-blue-400 hover:text-[#0747A6] h-7 px-2"
+                  >
+                    View all
+                    <ArrowUpRight className="w-3 h-3 ml-1" />
+                  </Button>
+                </div>
+
+                {ticketsLoading ? (
+                  <div className="p-5 space-y-3">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="h-10 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
+                    ))}
+                  </div>
+                ) : tickets.length === 0 ? (
+                  <div className="p-10 text-center">
+                    <CheckCircle className="w-10 h-10 mx-auto mb-3 text-emerald-400 opacity-50" />
+                    <p className="text-sm text-slate-500 dark:text-slate-400">No tickets yet</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-100 dark:border-slate-800">
+                          <th className="text-left px-5 py-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Key</th>
+                          <th className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Summary</th>
+                          <th className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">P</th>
+                          <th className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Status</th>
+                          <th className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Updated</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
+                        {tickets.map((ticket) => (
+                          <tr
+                            key={ticket.id}
+                            onClick={() => router.push(`/tickets/${ticket.ticketKey ?? ticket.id}`)}
+                            className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
+                          >
+                            <td className="px-5 py-3">
+                              <span className="font-mono text-xs font-bold text-[#0052CC] dark:text-blue-400 whitespace-nowrap">
+                                {ticket.ticketKey ?? ticket.id}
+                              </span>
+                            </td>
+                            <td className="px-3 py-3 max-w-[240px]">
+                              <span className="text-slate-800 dark:text-slate-200 truncate block text-sm">
+                                {ticket.title}
+                              </span>
+                            </td>
+                            <td className="px-3 py-3">
+                              <PriorityDot priority={ticket.priority} />
+                            </td>
+                            <td className="px-3 py-3">
+                              <StatusLozenge status={ticket.status} />
+                            </td>
+                            <td className="px-3 py-3 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                              {new Date(ticket.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
-            </CardContent>
-          </Card>
-        </div>
+
+              {/* AI Insights */}
+              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-200 dark:border-slate-800">
+                  <Zap className="w-4 h-4 text-amber-500" />
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    AI Insights
+                  </h2>
+                </div>
+                <div className="p-4 space-y-3">
+                  {mockAiInsights.map((insight) => {
+                    const Icon = insight.icon;
+                    const styles = {
+                      critical: "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300",
+                      suggestion: "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300",
+                      info: "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300",
+                    };
+                    return (
+                      <div
+                        key={insight.id}
+                        className={`p-3 rounded-lg border text-xs leading-relaxed ${styles[insight.type as keyof typeof styles]}`}
+                      >
+                        <div className="flex gap-2">
+                          <Icon className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                          <span>{insight.title}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {kpiData && (
+                  <div className="px-4 pb-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
+                      SLA Health
+                    </p>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-600 dark:text-slate-400">Breached</span>
+                        <span className="font-semibold text-red-600 dark:text-red-400">{kpiData.slaBreachedCount ?? 0}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-600 dark:text-slate-400">At risk</span>
+                        <span className="font-semibold text-amber-600 dark:text-amber-400">{kpiData.slaBreachRiskCount ?? 0}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-600 dark:text-slate-400">Avg resolution</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">{Math.round(kpiData.avgResolutionTime ?? 0)}d</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
-    </main>
+    </div>
   );
 }

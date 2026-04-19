@@ -6,15 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { ThemeSwitcher } from "@/components/theme-switcher";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2, Ticket, Shield, Zap, BarChart3 } from "lucide-react";
 
 export default function LoginContent() {
   const router = useRouter();
@@ -69,128 +62,156 @@ export default function LoginContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex items-center justify-center p-4">
-      {/* Theme Switcher - Top Right */}
-      <div className="absolute top-6 right-6 z-50">
-        <ThemeSwitcher />
-      </div>
-
-      {/* Background decoration */}
-      <div className="absolute top-0 right-0 -z-10 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-pulse" />
-      <div className="absolute bottom-0 left-0 -z-10 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-pulse" />
-
-      <div className="w-full max-w-md">
-        {/* Logo/Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-lg mb-4 shadow-lg">
-            <span className="text-xl font-bold text-white">3S</span>
-          </div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
-            3SC Portal
-          </h1>
-          <p className="text-slate-600 dark:text-slate-400">
-            Your support portal login
-          </p>
+    <div className="min-h-screen flex overflow-hidden bg-[#F4F5F7] dark:bg-slate-950">
+      {/* Left panel — branding */}
+      <div className="hidden lg:flex lg:w-[45%] bg-[#0747A6] dark:bg-slate-900 flex-col justify-between p-10 relative overflow-hidden">
+        {/* Background decoration */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full bg-white/5" />
+          <div className="absolute top-1/2 -left-24 w-72 h-72 rounded-full bg-white/5" />
+          <div className="absolute -bottom-20 right-10 w-80 h-80 rounded-full bg-white/5" />
         </div>
 
-        {/* Login Card */}
-        <Card className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 backdrop-blur-md shadow-xl">
-          <CardHeader className="space-y-2">
-            <CardTitle className="text-slate-900 dark:text-white">
-              Welcome Back
-            </CardTitle>
-            <CardDescription className="text-slate-600 dark:text-slate-400">
-              Sign in to your account to continue
-            </CardDescription>
-          </CardHeader>
+        {/* Logo */}
+        <div className="relative z-10">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-md">
+              <span className="text-sm font-black text-[#0052CC]">3S</span>
+            </div>
+            <div>
+              <p className="text-white font-bold text-lg leading-tight">3SC Connect</p>
+              <p className="text-blue-200/70 text-xs leading-tight">Customer Portal</p>
+            </div>
+          </div>
+        </div>
 
-          <CardContent>
-            <form onSubmit={handleLogin} className="space-y-5">
-              {/* Error Alert */}
-              {error && (
-                <div className="flex items-center gap-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-                  <p className="text-sm text-red-400">{error}</p>
+        {/* Main content */}
+        <div className="relative z-10 space-y-8">
+          <div>
+            <h2 className="text-4xl font-bold text-white leading-tight mb-4">
+              Support that<br />moves with you
+            </h2>
+            <p className="text-blue-100/80 text-base leading-relaxed">
+              Track issues, collaborate with your team, and resolve tickets faster
+              — all in one place.
+            </p>
+          </div>
+
+          {/* Feature highlights */}
+          <div className="space-y-4">
+            {[
+              { icon: Ticket, label: "Issue Tracking", desc: "Create and monitor support tickets" },
+              { icon: Zap, label: "AI Insights", desc: "Automated suggestions and escalations" },
+              { icon: BarChart3, label: "Real-time KPIs", desc: "Live performance metrics dashboard" },
+              { icon: Shield, label: "Role-based Access", desc: "Separate views for clients & team" },
+            ].map(({ icon: Icon, label, desc }) => (
+              <div key={label} className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <Icon className="w-4 h-4 text-white" />
                 </div>
-              )}
-
-              {/* Email Field */}
-              <div className="space-y-2">
-                <Label
-                  htmlFor="email"
-                  className="text-slate-900 dark:text-slate-200"
-                >
-                  Email Address
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={loading}
-                  className="bg-slate-50 dark:bg-slate-700/50 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white placeholder:text-slate-500 focus-visible:ring-blue-500"
-                />
+                <div>
+                  <p className="text-white text-sm font-semibold">{label}</p>
+                  <p className="text-blue-200/70 text-xs">{desc}</p>
+                </div>
               </div>
+            ))}
+          </div>
+        </div>
 
-              {/* Password Field */}
-              <div className="space-y-2">
-                <Label
-                  htmlFor="password"
-                  className="text-slate-900 dark:text-slate-200"
-                >
-                  Password
-                </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={loading}
-                  className="bg-slate-50 dark:bg-slate-700/50 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white placeholder:text-slate-500 focus-visible:ring-blue-500"
-                />
-              </div>
-
-              {/* Submit Button */}
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-2 h-10 mt-6"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  "Sign In"
-                )}
-              </Button>
-
-              {/* Footer Links */}
-              <div className="flex items-center justify-between text-sm pt-2">
-                <a
-                  href="#"
-                  className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition"
-                >
-                  Forgot password?
-                </a>
-                <a
-                  href="#"
-                  className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition"
-                >
-                  Sign up
-                </a>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-
-        {/* Footer */}
-        <p className="text-center text-slate-600 dark:text-slate-500 text-sm mt-6">
+        <p className="relative z-10 text-blue-200/50 text-xs">
           © 2026 3SC Connect. All rights reserved.
         </p>
+      </div>
+
+      {/* Right panel — login form */}
+      <div className="flex-1 flex flex-col items-center justify-center p-8 relative">
+        {/* Theme switcher */}
+        <div className="absolute top-6 right-6">
+          <ThemeSwitcher />
+        </div>
+
+        <div className="w-full max-w-sm">
+          {/* Mobile logo */}
+          <div className="lg:hidden flex items-center justify-center gap-2 mb-8">
+            <div className="w-9 h-9 bg-[#0052CC] rounded-xl flex items-center justify-center">
+              <span className="text-xs font-black text-white">3S</span>
+            </div>
+            <span className="text-slate-900 dark:text-white font-bold text-lg">3SC Connect</span>
+          </div>
+
+          <div className="mb-8">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">
+              Welcome back
+            </h1>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">
+              Sign in to your portal account
+            </p>
+          </div>
+
+          {/* Error alert */}
+          {error && (
+            <div className="flex items-start gap-3 p-3 mb-5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-lg">
+              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="email" className="text-slate-700 dark:text-slate-300 text-sm font-medium">
+                Email address
+              </Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={loading}
+                className="h-10 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white placeholder:text-slate-400 focus-visible:ring-[#0052CC] focus-visible:border-[#0052CC]"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password" className="text-slate-700 dark:text-slate-300 text-sm font-medium">
+                  Password
+                </Label>
+                <a href="#" className="text-xs text-[#0052CC] dark:text-blue-400 hover:underline">
+                  Forgot password?
+                </a>
+              </div>
+              <Input
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+                className="h-10 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white placeholder:text-slate-400 focus-visible:ring-[#0052CC] focus-visible:border-[#0052CC]"
+              />
+            </div>
+
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full h-10 bg-[#0052CC] hover:bg-[#0747A6] text-white font-semibold mt-2 rounded-md shadow-sm"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                "Sign in"
+              )}
+            </Button>
+          </form>
+
+          <p className="text-center text-slate-400 dark:text-slate-600 text-xs mt-8">
+            Having trouble? Contact your system administrator.
+          </p>
+        </div>
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import InternalDashboard from "./internal/page";
 import ClientDashboard from "./client/page";
+import UserDashboard from "./user/page";
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
@@ -24,18 +25,22 @@ export default function DashboardPage() {
     );
   }
 
-  // Check user role to determine which dashboard to show
   const userRole = session?.user?.role as string | undefined;
+  const is3SCTeam = userRole && ["THREESC_ADMIN", "THREESC_LEAD", "THREESC_AGENT"].includes(userRole);
 
-  // 3SC team roles: THREESC_ADMIN, THREESC_LEAD, THREESC_AGENT
-  // Client roles: CLIENT_ADMIN, CLIENT_USER
-  const is3SCTeam =
-    userRole &&
-    ["THREESC_ADMIN", "THREESC_LEAD", "THREESC_AGENT"].includes(userRole);
-
-  if (is3SCTeam) {
-    return <InternalDashboard />;
-  } else {
-    return <ClientDashboard />;
+  if (userRole === "THREESC_ADMIN") {
+    router.replace("/admin");
+    return null;
   }
+  if (userRole === "THREESC_LEAD") {
+    router.replace("/dashboard/lead");
+    return null;
+  }
+  if (userRole === "THREESC_AGENT") {
+    router.replace("/dashboard/agent");
+    return null;
+  }
+  if (is3SCTeam) return <InternalDashboard />;
+  if (userRole === "CLIENT_USER") return <UserDashboard />;
+  return <ClientDashboard />;
 }

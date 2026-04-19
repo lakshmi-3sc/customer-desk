@@ -50,15 +50,15 @@ export function ThemeSwitcher() {
   return (
     <div className="relative" ref={dropdownRef}>
       <Button
-        variant="outline"
+        variant="ghost"
         size="icon"
         onClick={() => setIsOpen(!isOpen)}
-        className="border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700"
+        className="w-7 h-7 text-blue-200 hover:text-white hover:bg-white/10 border-0"
       >
         {theme === "dark" ? (
-          <Moon className="h-4 w-4 text-slate-900 dark:text-slate-200" />
+          <Moon className="h-3.5 w-3.5" />
         ) : (
-          <Sun className="h-4 w-4 text-slate-900" />
+          <Sun className="h-3.5 w-3.5" />
         )}
         <span className="sr-only">Toggle theme</span>
       </Button>

@@ -179,6 +179,7 @@ model SlaPolicy {
 
 model Issue {
   id               String        @id @default(cuid())
+  ticketKey        String?       @unique
   title            String
   description      String
   category         IssueCategory @default(GENERAL)

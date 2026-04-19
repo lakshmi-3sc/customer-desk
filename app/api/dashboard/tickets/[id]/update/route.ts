@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { resolveTicketId } from "@/lib/resolve-ticket";
+import type { Server } from "socket.io";
 
 export async function PUT(
   request: NextRequest,
@@ -9,7 +11,9 @@ export async function PUT(
 ) {
   try {
     // Resolve params promise (Next.js 16 requirement)
-    const { id } = await params;
+    const { id: idOrKey } = await params;
+    const id = await resolveTicketId(idOrKey);
+    if (!id) return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
 
     // Get authenticated session
     const session = await getServerSession(authOptions);
@@ -114,6 +118,15 @@ export async function PUT(
         project: true,
       },
     });
+
+    // Broadcast update to all subscribers via Socket.IO
+    const io: Server | undefined = (global as any).__socketio;
+    if (io) {
+      // Notify anyone viewing this specific ticket
+      io.to(`ticket:${id}`).emit("ticket:updated", updatedTicket);
+      // Notify ticket list subscribers (dashboards)
+      io.to("tickets").emit("ticket:updated", updatedTicket);
+    }
 
     return NextResponse.json(updatedTicket);
   } catch (error) {

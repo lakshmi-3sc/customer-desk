@@ -80,6 +80,8 @@ export async function GET() {
         criticalIssues: criticalIssues,
         avgResolutionTime: Math.round(avgResolutionTime * 10) / 10, // Round to 1 decimal
         teamEfficiencyScore: Math.round(teamEfficiencyScore),
+        slaBreachedCount: slaBreachedCount,
+        slaBreachRiskCount: slaBreachRiskCount,
         totalIssues: totalIssues,
       },
     });

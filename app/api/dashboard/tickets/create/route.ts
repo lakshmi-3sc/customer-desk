@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
+import { generateTicketKey } from "@/lib/ticket-key";
 
 export async function POST(req: NextRequest) {
   try {
@@ -56,6 +57,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Create the ticket
+    const ticketKey = await generateTicketKey(projectId);
     const ticket = await prisma.issue.create({
       data: {
         title,
@@ -66,13 +68,14 @@ export async function POST(req: NextRequest) {
         raisedById: session.user.id,
         clientId: clientMember.clientId,
         projectId: projectId,
+        ticketKey,
       },
     });
 
     return NextResponse.json(
       {
         success: true,
-        ticketId: ticket.id,
+        ticketId: ticket.ticketKey ?? ticket.id,
         message: "Ticket created successfully",
       },
       { status: 201 },

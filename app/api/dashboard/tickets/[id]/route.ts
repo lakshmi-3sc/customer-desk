@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { resolveTicketId } from "@/lib/resolve-ticket";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { id: ticketId } = await params;
+    const { id: idOrKey } = await params;
+    const ticketId = await resolveTicketId(idOrKey);
+
+    if (!ticketId) {
+      return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+    }
 
     const ticket = await prisma.issue.findUnique({
       where: {
