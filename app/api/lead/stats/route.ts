@@ -38,6 +38,7 @@ export async function GET() {
               status: true,
               slaDueAt: true,
               resolvedAt: true,
+              createdAt: true,
               priority: true,
             },
           },
@@ -68,16 +69,27 @@ export async function GET() {
       ["OPEN", "ACKNOWLEDGED", "IN_PROGRESS"].includes(i.status)
     );
     const overdue = active.filter((i) => i.slaDueAt && new Date(i.slaDueAt) < now).length;
-    const resolvedTodayCount = agent.assignedIssues.filter(
-      (i) => i.resolvedAt && new Date(i.resolvedAt) >= todayStart
+    const resolvedByAgent = agent.assignedIssues.filter(
+      (i) => i.resolvedAt && i.status === "RESOLVED"
+    );
+    const resolvedTodayCount = resolvedByAgent.filter(
+      (i) => new Date(i.resolvedAt!) >= todayStart
     ).length;
+    // Average resolution time in hours for this agent's resolved issues
+    let avgResponseHrs = 0;
+    if (resolvedByAgent.length > 0) {
+      const totalMs = resolvedByAgent.reduce((sum, i) => {
+        return sum + (new Date(i.resolvedAt!).getTime() - new Date(i.createdAt).getTime());
+      }, 0);
+      avgResponseHrs = Math.round(totalMs / resolvedByAgent.length / 3600000);
+    }
     return {
       id: agent.id,
       name: agent.name,
       assigned: active.length,
       overdue,
       resolvedToday: resolvedTodayCount,
-      avgResponseHrs: Math.floor(Math.random() * 3) + 1,
+      avgResponseHrs,
     };
   });
 
@@ -102,8 +114,24 @@ export async function GET() {
     return acc;
   }, {});
 
+  // Calculate actual average resolution time in hours across all resolved issues
+  const resolvedWithTimes = await prisma.issue.findMany({
+    where: { status: "RESOLVED", resolvedAt: { not: null } },
+    select: { createdAt: true, resolvedAt: true },
+    orderBy: { resolvedAt: "desc" },
+    take: 100,
+  });
+  let avgResolutionHrs = 0;
+  if (resolvedWithTimes.length > 0) {
+    const totalMs = resolvedWithTimes.reduce(
+      (sum, i) => sum + (i.resolvedAt!.getTime() - i.createdAt.getTime()),
+      0
+    );
+    avgResolutionHrs = Math.round(totalMs / resolvedWithTimes.length / 3600000);
+  }
+
   return NextResponse.json({
-    kpis: { totalOpen, slaBreaches, resolvedToday, escalated, csatScore: 88, avgResolutionHrs: 18 },
+    kpis: { totalOpen, slaBreaches, resolvedToday, escalated, csatScore: 88, avgResolutionHrs },
     agentStats,
     recentEscalations,
     chartData: Object.entries(chartData).map(([name, v]) => ({ name, ...v })),

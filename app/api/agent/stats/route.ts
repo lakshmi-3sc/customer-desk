@@ -17,7 +17,7 @@ export async function GET() {
 
   const PRIORITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
-  const [assigned, resolvedToday, recentIssues] = await Promise.all([
+  const [assigned, resolvedTodayIssues, recentIssues] = await Promise.all([
     prisma.issue.findMany({
       where: { assignedToId: userId, status: { notIn: ["RESOLVED", "CLOSED"] } },
       orderBy: [{ slaDueAt: "asc" }],
@@ -27,8 +27,9 @@ export async function GET() {
         client: { select: { id: true, name: true } },
       },
     }),
-    prisma.issue.count({
+    prisma.issue.findMany({
       where: { assignedToId: userId, status: "RESOLVED", resolvedAt: { gte: todayStart } },
+      select: { createdAt: true, resolvedAt: true },
     }),
     prisma.issue.findMany({
       where: { assignedToId: userId },
@@ -41,6 +42,8 @@ export async function GET() {
       },
     }),
   ]);
+
+  const resolvedToday = resolvedTodayIssues.length;
 
   const overdue = assigned.filter((i) => i.slaDueAt && new Date(i.slaDueAt) < now).length;
   const slaBreaches = assigned.filter((i) => i.slaBreached).length;
@@ -73,8 +76,15 @@ export async function GET() {
       return { id: i.id, ticketKey: i.ticketKey, title: i.title, waitHours, priority: i.priority, client: i.client };
     });
 
-  // Avg response time (approx: hours since created for resolved today)
-  const avgResponseHrs = resolvedToday > 0 ? 4 : 0;
+  // Avg resolution time in hours from today's resolved issues
+  let avgResponseHrs = 0;
+  if (resolvedTodayIssues.length > 0) {
+    const totalMs = resolvedTodayIssues.reduce(
+      (sum, i) => sum + (i.resolvedAt!.getTime() - i.createdAt.getTime()),
+      0
+    );
+    avgResponseHrs = Math.round(totalMs / resolvedTodayIssues.length / 3600000);
+  }
 
   return NextResponse.json({
     kpis: { assigned: assigned.length, overdue, resolvedToday, slaBreaches, pendingResponse, avgResponseHrs },
