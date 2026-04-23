@@ -32,15 +32,17 @@ export async function GET(request: NextRequest) {
     }
 
     if (role === "CLIENT_USER") {
-      // Only see own issues
       where.raisedById = currentUser.id;
-    } else if (!is3SC) {
-      // CLIENT_ADMIN: scope to their client
+    } else if (role === "CLIENT_ADMIN") {
       const membership = await prisma.clientMember.findFirst({
         where: { userId: currentUser.id },
       });
       if (membership) where.clientId = membership.clientId;
+    } else if (role === "THREESC_AGENT") {
+      // Agents only see tickets assigned to them
+      where.assignedToId = currentUser.id;
     }
+    // THREESC_LEAD and THREESC_ADMIN see all tickets
 
     const tickets = await prisma.issue.findMany({
       where,

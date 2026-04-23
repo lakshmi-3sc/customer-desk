@@ -10,6 +10,12 @@ const TYPE_META: Record<string, { icon: React.ElementType; color: string; bg: st
   field_change: { icon: Info, color: "text-slate-600 dark:text-slate-400", bg: "bg-slate-100 dark:bg-slate-800" },
   comment: { icon: MessageSquare, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-100 dark:bg-purple-950" },
   sla: { icon: AlertTriangle, color: "text-red-600 dark:text-red-400", bg: "bg-red-100 dark:bg-red-950" },
+  NEW_COMMENT: { icon: MessageSquare, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-100 dark:bg-purple-950" },
+  ISSUE_ASSIGNED: { icon: ArrowRight, color: "text-green-600 dark:text-green-400", bg: "bg-green-100 dark:bg-green-950" },
+  STATUS_UPDATED: { icon: Info, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-100 dark:bg-blue-950" },
+  SLA_WARNING: { icon: AlertTriangle, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-100 dark:bg-orange-950" },
+  ESCALATION: { icon: AlertTriangle, color: "text-red-600 dark:text-red-400", bg: "bg-red-100 dark:bg-red-950" },
+  ISSUE_RESOLVED: { icon: Info, color: "text-green-600 dark:text-green-400", bg: "bg-green-100 dark:bg-green-950" },
 };
 
 export function NotificationBell() {

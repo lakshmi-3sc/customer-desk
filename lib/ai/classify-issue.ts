@@ -1,17 +1,16 @@
-// lib/ai/classify.ts
 import Anthropic from "@anthropic-ai/sdk";
 
-const client = new Anthropic();
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function classifyIssue(title: string, description: string) {
   const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 500,
     messages: [
       {
         role: "user",
-        content: `You are an AI assistant for a Supply Network Planning (SNP) SaaS platform. 
-      
+        content: `You are an AI assistant for a Supply Network Planning (SNP) SaaS platform.
+
 The platform has 3 modules: Replenishment Planning, Production Planning, Raw Material Planning.
 
 Analyze this support ticket and respond ONLY with a valid JSON object, no explanation:
@@ -21,10 +20,10 @@ Description: ${description}
 
 Respond with exactly this JSON:
 {
-  "category": one of [FEATURE_REQUEST, BUG, DATA_ACCURACY, PERFORMANCE, ACCESS_SECURITY],
-  "priority": one of [LOW, MEDIUM, HIGH, CRITICAL],
+  "category": "one of [FEATURE_REQUEST, BUG, DATA_ACCURACY, PERFORMANCE, ACCESS_SECURITY]",
+  "priority": "one of [LOW, MEDIUM, HIGH, CRITICAL]",
   "reasoning": "one sentence explanation",
-  "module": one of [Replenishment Planning, Production Planning, Raw Material Planning, General],
+  "module": "one of [Replenishment Planning, Production Planning, Raw Material Planning, General]",
   "keywords": ["keyword1", "keyword2"]
 }
 
@@ -46,5 +45,6 @@ Category rules:
 
   const text =
     response.content[0].type === "text" ? response.content[0].text : "";
-  return JSON.parse(text);
+  const json = text.replace(/^```json\n?/, "").replace(/\n?```$/, "");
+  return JSON.parse(json);
 }

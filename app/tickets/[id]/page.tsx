@@ -25,11 +25,13 @@ import {
   Mail,
   AtSign,
   ExternalLink,
+  Clock,
 } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
+import { NotificationBell } from "@/components/notification-bell";
 import { getSocket } from "@/lib/socket-client";
 
 interface Ticket {
@@ -285,6 +287,7 @@ function CommentNode({
   );
 }
 
+
 export default function TicketDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -310,12 +313,15 @@ export default function TicketDetailPage() {
   const [ticketHistory, setTicketHistory] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [slaCountdown, setSlaCountdown] = useState<string>('');
+  const [mentionSuggestions, setMentionSuggestions] = useState<UserType[]>([]);
+  const [showMentions, setShowMentions] = useState(false);
 
   // Lead-specific state
   const [escalationNote, setEscalationNote] = useState('');
   const [escalating, setEscalating] = useState(false);
   const [escalationSuccess, setEscalationSuccess] = useState(false);
   const [aiOverride, setAiOverride] = useState(false);
+  const [aiInsightsOpen, setAiInsightsOpen] = useState(false);
 
   // Internal notes state
   const [internalText, setInternalText] = useState('');
@@ -327,6 +333,68 @@ export default function TicketDetailPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiUsed, setAiUsed] = useState(false);
   const [emailNotify, setEmailNotify] = useState(true);
+
+  // Smart routing state
+  type AgentRoutingData = {
+    id: string; name: string; email: string;
+    openCount: number; totalResolved: number; categoryResolved: number;
+    expertiseScore: number; workloadScore: number; compositeScore: number;
+    expertiseLabel: string; avgResolutionHrs: number | null;
+    aiReason: string;
+  };
+  const [routingAgents, setRoutingAgents] = useState<AgentRoutingData[]>([]);
+  const [routingBest, setRoutingBest] = useState<AgentRoutingData | null>(null);
+  const [routingLoading, setRoutingLoading] = useState(false);
+  const [routingExpanded, setRoutingExpanded] = useState(false);
+  const [routingAiSummary, setRoutingAiSummary] = useState('');
+
+  // Resolution prediction state
+  type PredictionData = {
+    predictedHrs: number | null;
+    displayLabel: string | null;
+    confidence: string;
+    confidenceReason: string;
+    breakdown: string;
+    inputs: {
+      globalAvgHrs: number | null;
+      globalSampleSize: number;
+      agentAvgHrs: number | null;
+      agentOpenCount: number;
+      agentCategoryResolved: number;
+      workloadPenaltyPct: number;
+      adjustedBaseline: number | null;
+    };
+  };
+  const [prediction, setPrediction] = useState<PredictionData | null>(null);
+  const [predictionLoading, setPredictionLoading] = useState(false);
+
+  // Similar resolutions state
+  type SimilarResolution = {
+    id: string;
+    ticketKey: string | null;
+    title: string;
+    category: string;
+    priority: string;
+    resolvedAt: string | null;
+    assignedTo: { name: string } | null;
+    similarityScore: number;
+    method: string;
+    resolutionHints?: string[];
+  };
+  const [similarResolutions, setSimilarResolutions] = useState<SimilarResolution[]>([]);
+  const [similarLoading, setSimilarLoading] = useState(false);
+
+  // Fetch stored similar resolved tickets from DB
+  useEffect(() => {
+    if (!ticket || !is3SCTeam) return;
+
+    setSimilarLoading(true);
+    fetch(`/api/dashboard/similar-tickets?ticketId=${ticket.id}`)
+      .then(r => r.json())
+      .then(data => setSimilarResolutions(data.similar ?? []))
+      .catch(console.error)
+      .finally(() => setSimilarLoading(false));
+  }, [ticket?.id, is3SCTeam]);
 
   // SLA countdown timer
   useEffect(() => {
@@ -443,6 +511,43 @@ export default function TicketDetailPage() {
         : { ...c, replies: addReplyToTree(c.replies ?? [], newComment) }
     );
 
+  const handleCommentChange = (text: string) => {
+    setCommentText(text);
+
+    // Detect @mention
+    const lastAtIndex = text.lastIndexOf('@');
+    if (lastAtIndex === -1) {
+      setShowMentions(false);
+      return;
+    }
+
+    // Get text after @
+    const afterAt = text.substring(lastAtIndex + 1);
+
+    // If space after @, don't show suggestions
+    if (afterAt.includes(' ')) {
+      setShowMentions(false);
+      return;
+    }
+
+    // Filter users by name
+    const query = afterAt.toLowerCase();
+    const filtered = users.filter(u =>
+      u.name.toLowerCase().includes(query)
+    ).slice(0, 5);
+
+    setMentionSuggestions(filtered);
+    setShowMentions(filtered.length > 0);
+  };
+
+  const insertMention = (userName: string) => {
+    const lastAtIndex = commentText.lastIndexOf('@');
+    const beforeMention = commentText.substring(0, lastAtIndex);
+    const newText = beforeMention + '@' + userName + ' ';
+    setCommentText(newText);
+    setShowMentions(false);
+  };
+
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!commentText.trim()) return;
@@ -483,6 +588,7 @@ export default function TicketDetailPage() {
       const updateData =
         field === "assignee" ? { assignedToId: value }
         : field === "priority" ? { priority: value }
+        : field === "category" ? { category: value }
         : { status: value };
 
       const response = await fetch(
@@ -535,6 +641,38 @@ export default function TicketDetailPage() {
       setInternalText('');
     } catch {} finally { setSubmittingInternal(false); }
   };
+
+  // Load AI smart routing when ticket is loaded and user is 3SC team (only for active tickets)
+  useEffect(() => {
+    if (!ticket || !is3SCTeam) return;
+    if (['RESOLVED', 'CLOSED'].includes(ticket.status)) return;
+    setRoutingLoading(true);
+    const params = new URLSearchParams({
+      category: ticket.category,
+      priority: ticket.priority,
+      title: ticket.title,
+    });
+    fetch(`/api/dashboard/agent-routing?${params}`)
+      .then(r => r.json())
+      .then(data => {
+        setRoutingAgents(data.agents ?? []);
+        setRoutingBest(data.best ?? null);
+        setRoutingAiSummary(data.aiSummary ?? '');
+      })
+      .catch(console.error)
+      .finally(() => setRoutingLoading(false));
+  }, [ticket?.id, is3SCTeam]);
+
+  // Fetch resolution prediction whenever ticket or assignee changes
+  useEffect(() => {
+    if (!ticket || !is3SCTeam) return;
+    setPredictionLoading(true);
+    fetch(`/api/dashboard/resolution-prediction?ticketId=${ticket.id}`)
+      .then(r => r.json())
+      .then(data => setPrediction(data))
+      .catch(console.error)
+      .finally(() => setPredictionLoading(false));
+  }, [ticket?.id, ticket?.assignedTo?.id, is3SCTeam]);
 
   const loadAiAssist = async () => {
     if (!ticket || aiAssist) return;
@@ -596,15 +734,15 @@ export default function TicketDetailPage() {
               </span>
             </nav>
           }
+          right={<NotificationBell />}
         />
 
         {/* Main content */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="max-w-6xl mx-auto px-6 py-6">
-            <div className="grid grid-cols-3 gap-6">
+        <div className="flex-1 overflow-hidden">
+          <div className="h-full flex gap-6 px-6 py-6">
 
-              {/* Left column (2/3): ticket header + description + activity */}
-              <div className="col-span-2 space-y-4">
+              {/* Left column: ticket header + description + activity */}
+              <div className="flex-[2] min-w-0 overflow-y-auto space-y-4 pr-1">
 
                 {/* SLA banner */}
                 {(ticket.slaBreached || ticket.slaBreachRisk || ticket.slaDueAt) && (
@@ -668,6 +806,37 @@ export default function TicketDetailPage() {
                   </div>
                 </div>
 
+                {/* AI Insights card — 3SC team only */}
+                {is3SCTeam && ticket.aiCategory && (
+                  <div className="rounded-md border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/20 p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Bot className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                      <p className="text-sm font-semibold text-purple-800 dark:text-purple-300">AI Classification</p>
+                      <span className="ml-auto text-[10px] font-semibold text-purple-500 dark:text-purple-500 bg-purple-100 dark:bg-purple-900/50 px-1.5 py-0.5 rounded">Auto-detected</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-700">
+                        <Tag className="w-3 h-3" />
+                        {ticket.aiCategory.replace(/_/g, " ")}
+                      </span>
+                      {ticket.aiPriority && (
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                          ticket.aiPriority === "CRITICAL" ? "bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800" :
+                          ticket.aiPriority === "HIGH" ? "bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800" :
+                          ticket.aiPriority === "MEDIUM" ? "bg-yellow-100 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800" :
+                          "bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+                        }`}>
+                          <AlertCircle className="w-3 h-3" />
+                          {ticket.aiPriority.charAt(0) + ticket.aiPriority.slice(1).toLowerCase()} priority
+                        </span>
+                      )}
+                    </div>
+                    {ticket.aiSummary && (
+                      <p className="text-xs text-purple-700 dark:text-purple-400 leading-relaxed">{ticket.aiSummary}</p>
+                    )}
+                  </div>
+                )}
+
                 {/* Description */}
                 <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 p-6">
                   <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 uppercase tracking-wide mb-3">Description</h2>
@@ -713,19 +882,26 @@ export default function TicketDetailPage() {
                   {/* Conversation tab */}
                   {detailTab === 'conversation' && (
                     <div className="p-6">
-                      {/* Email notification toggle — 3SC team */}
-                      {is3SCTeam && (
-                        <div className="flex items-center justify-between mb-4 px-3 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
-                          <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
-                            <Mail className="w-3.5 h-3.5" />
-                            <span>Email customer on reply</span>
-                          </div>
-                          <button onClick={() => setEmailNotify((v) => !v)}
-                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${emailNotify ? 'bg-[#0052CC]' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform ${emailNotify ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+                      {comments.filter((c) => !c.isInternal).length > 3 && (
+                        <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800 flex items-center justify-between">
+                          <span className="text-xs text-blue-700 dark:text-blue-300">Many comments? Get a quick summary</span>
+                          <button
+                            onClick={async () => {
+                              const res = await fetch(`/api/dashboard/summarize-conversation`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ ticketId: ticket?.id })
+                              });
+                              const data = await res.json();
+                              alert(data.summary || 'Summary unavailable');
+                            }}
+                            className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+                          >
+                            Summarize →
                           </button>
                         </div>
                       )}
+
                       {comments.filter((c) => !c.isInternal).length > 0 && (
                         <div className="space-y-5 mb-6">
                           {comments.filter((c) => !c.isInternal).map((c) => (
@@ -760,10 +936,27 @@ export default function TicketDetailPage() {
                               id="comment"
                               placeholder={is3SCTeam ? "Reply to customer... (type @ to mention)" : "Add a comment..."}
                               value={commentText}
-                              onChange={(e) => setCommentText(e.target.value)}
+                              onChange={(e) => handleCommentChange(e.target.value)}
                               rows={3}
                               className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0052CC] focus:border-[#0052CC] resize-none"
                             />
+                            {showMentions && mentionSuggestions.length > 0 && (
+                              <div className="absolute bottom-full left-0 mb-1 w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md shadow-lg z-10">
+                                {mentionSuggestions.map((user) => (
+                                  <button
+                                    key={user.id}
+                                    type="button"
+                                    onClick={() => insertMention(user.name)}
+                                    className="w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2"
+                                  >
+                                    <div className="w-5 h-5 rounded-full bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-slate-300 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                                      {user.name.substring(0, 2).toUpperCase()}
+                                    </div>
+                                    <span>{user.name}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           </div>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -772,7 +965,7 @@ export default function TicketDetailPage() {
                                 <Paperclip className="w-3.5 h-3.5" />
                               </button>
                               <button type="button" title="Mention someone"
-                                onClick={() => setCommentText((v) => v + '@')}
+                                onClick={() => handleCommentChange(commentText + '@')}
                                 className="p-1.5 rounded text-slate-400 hover:text-[#0052CC] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                                 <AtSign className="w-3.5 h-3.5" />
                               </button>
@@ -985,212 +1178,160 @@ export default function TicketDetailPage() {
                 </div>
               </div>
 
-              {/* Right column (1/3): metadata */}
-              <div className="space-y-3">
+              {/* Right column: metadata sidebar */}
+              <div className="w-80 flex-shrink-0 overflow-y-auto space-y-3 pb-6">
 
-                {/* Status */}
-                <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 p-4">
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Status</p>
-                  {is3SCTeam ? (
-                    <div>
-                      <select
-                        value={ticket.status}
-                        onChange={(e) => handleUpdateField("status", e.target.value)}
-                        disabled={updatingField === "status"}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0052CC] disabled:opacity-50"
-                      >
+                {/* Top info card: Status, Assignee, Dates, Reporter */}
+                <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 p-4 space-y-4">
+                  {/* Status */}
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Status</p>
+                    {is3SCTeam ? (
+                      <select value={ticket.status} onChange={(e) => handleUpdateField("status", e.target.value)} disabled={updatingField === "status"} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0052CC] disabled:opacity-50">
                         <option value="OPEN">Open</option>
                         <option value="ACKNOWLEDGED">Acknowledged</option>
                         <option value="IN_PROGRESS">In Progress</option>
                         <option value="RESOLVED">Resolved</option>
                         <option value="CLOSED">Closed</option>
                       </select>
-                      {updatingField === "status" && <p className="text-xs text-slate-400 mt-1 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />Updating…</p>}
-                    </div>
-                  ) : (
-                    <StatusLozenge status={ticket.status} />
-                  )}
-                </div>
+                    ) : (
+                      <StatusLozenge status={ticket.status} />
+                    )}
+                  </div>
 
-                {/* Assignee */}
-                <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 p-4">
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5" />Assignee
-                  </p>
-                  {is3SCTeam ? (
-                    <div>
-                      <select
-                        value={ticket.assignedTo?.id || ""}
-                        onChange={(e) => handleUpdateField("assignee", e.target.value || null)}
-                        disabled={updatingField === "assignee"}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0052CC] disabled:opacity-50"
-                      >
+                  <div className="border-t border-slate-100 dark:border-slate-800" />
+
+                  {/* Assignee */}
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><User className="w-3.5 h-3.5" />Assignee</p>
+                    {is3SCTeam ? (
+                      <select value={ticket.assignedTo?.id || ""} onChange={(e) => handleUpdateField("assignee", e.target.value || null)} disabled={updatingField === "assignee"} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0052CC] disabled:opacity-50">
                         <option value="">Unassigned</option>
                         {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
                       </select>
-                      {updatingField === "assignee" && <p className="text-xs text-slate-400 mt-1 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />Updating…</p>}
-                    </div>
-                  ) : ticket.assignedTo ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-[#0747A6] text-white flex items-center justify-center text-xs font-bold">
-                        {getInitials(ticket.assignedTo.name)}
-                      </div>
-                      <div>
+                    ) : ticket.assignedTo ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-[#0747A6] text-white flex items-center justify-center text-xs font-bold flex-shrink-0">{getInitials(ticket.assignedTo.name)}</div>
                         <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{ticket.assignedTo.name}</p>
-                        <p className="text-xs text-slate-500">{ticket.assignedTo.email}</p>
                       </div>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-400">Unassigned</p>
-                  )}
-                </div>
+                    ) : <p className="text-sm text-slate-400">Unassigned</p>}
+                  </div>
 
-                {/* Reporter */}
-                <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 p-4">
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5" />Reporter
-                  </p>
-                  {ticket.raisedBy ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center text-xs font-bold">
-                        {getInitials(ticket.raisedBy.name)}
-                      </div>
-                      <div>
+                  <div className="border-t border-slate-100 dark:border-slate-800" />
+
+                  {/* Dates */}
+                  <div className="space-y-2 text-xs">
+                    <div><p className="text-slate-500 dark:text-slate-400 font-medium">Created</p><p className="text-slate-700 dark:text-slate-300">{formatDate(ticket.createdAt)}</p></div>
+                    <div><p className="text-slate-500 dark:text-slate-400 font-medium">Updated</p><p className="text-slate-700 dark:text-slate-300">{formatDate(ticket.updatedAt)}</p></div>
+                  </div>
+
+                  <div className="border-t border-slate-100 dark:border-slate-800" />
+
+                  {/* Reporter */}
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Reporter</p>
+                    {ticket.raisedBy ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center text-xs font-bold flex-shrink-0">{getInitials(ticket.raisedBy.name)}</div>
                         <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{ticket.raisedBy.name}</p>
-                        <p className="text-xs text-slate-500">{ticket.raisedBy.email}</p>
                       </div>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-400">Unknown</p>
-                  )}
-                </div>
-
-                {/* Priority */}
-                <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 p-4">
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Priority</p>
-                  <PriorityBadge priority={ticket.priority} />
-                </div>
-
-                {/* Dates */}
-                <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 p-4">
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5" />Dates
-                  </p>
-                  <div className="space-y-2 text-sm">
-                    <div>
-                      <p className="text-xs text-slate-400 uppercase tracking-wide">Created</p>
-                      <p className="text-slate-700 dark:text-slate-300 font-medium">{formatDate(ticket.createdAt)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-400 uppercase tracking-wide">Updated</p>
-                      <p className="text-slate-700 dark:text-slate-300 font-medium">{formatDate(ticket.updatedAt)}</p>
-                    </div>
+                    ) : <p className="text-sm text-slate-400">Unknown</p>}
                   </div>
                 </div>
 
-                {/* Category */}
-                <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 p-4">
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5" />Category
-                  </p>
-                  <span className="text-xs px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">
-                    {ticket.category}
-                  </span>
-                </div>
-
-                {/* Priority override — Lead only */}
-                {isLead && (
-                  <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 p-4">
-                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Override Priority</p>
-                    <select
-                      value={ticket.priority}
-                      onChange={(e) => handleUpdateField('priority', e.target.value)}
-                      disabled={updatingField === 'priority'}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0052CC] disabled:opacity-50">
-                      <option value="CRITICAL">Critical</option>
-                      <option value="HIGH">High</option>
-                      <option value="MEDIUM">Medium</option>
-                      <option value="LOW">Low</option>
-                    </select>
-                    {updatingField === 'priority' && <p className="text-xs text-slate-400 mt-1 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />Updating…</p>}
-                  </div>
-                )}
-
-                {/* Escalation — Lead only */}
-                {isLead && (
-                  <div className="bg-white dark:bg-slate-900 rounded-md border border-amber-200 dark:border-amber-800 p-4">
-                    <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide mb-1 flex items-center gap-1.5">
-                      <TriangleAlert className="w-3.5 h-3.5" />Escalate Issue
-                    </p>
-                    {ticket.escalated && (
-                      <span className="inline-block mb-2 text-xs bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 px-2 py-0.5 rounded font-semibold">Already escalated</span>
+                {/* Priority & Category card */}
+                <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 p-4 space-y-4">
+                  {/* Priority */}
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Priority</p>
+                    {is3SCTeam ? (
+                      <select value={ticket.priority} onChange={(e) => handleUpdateField('priority', e.target.value)} disabled={updatingField === 'priority'} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0052CC] disabled:opacity-50">
+                        <option value="CRITICAL">Critical</option>
+                        <option value="HIGH">High</option>
+                        <option value="MEDIUM">Medium</option>
+                        <option value="LOW">Low</option>
+                      </select>
+                    ) : <PriorityBadge priority={ticket.priority} />}
+                    {is3SCTeam && ticket.aiPriority && ticket.aiPriority !== ticket.priority && (
+                      <p className="text-xs text-purple-600 dark:text-purple-400 mt-1.5">🤖 AI suggested: {ticket.aiPriority}</p>
                     )}
-                    {escalationSuccess && (
-                      <p className="text-xs text-emerald-600 mb-2 font-medium">Escalation recorded successfully.</p>
-                    )}
-                    <textarea
-                      placeholder="Add escalation note (optional)..."
-                      value={escalationNote}
-                      onChange={(e) => setEscalationNote(e.target.value)}
-                      rows={2}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none mb-2"
-                    />
-                    <button
-                      onClick={handleEscalate}
-                      disabled={escalating}
-                      className="w-full py-1.5 text-xs bg-amber-500 hover:bg-amber-600 text-white rounded font-semibold disabled:opacity-50 flex items-center justify-center gap-1">
-                      {escalating ? <Loader2 className="w-3 h-3 animate-spin" /> : <TriangleAlert className="w-3 h-3" />}
-                      {escalating ? 'Escalating...' : 'Mark as Escalated'}
-                    </button>
                   </div>
-                )}
 
-                {/* AI Routing panel — 3SC team + if AI data exists */}
-                {is3SCTeam && (ticket.aiCategory || ticket.aiPriority || ticket.aiSuggestedAgent) && (
-                  <div className="bg-white dark:bg-slate-900 rounded-md border border-purple-200 dark:border-purple-800 p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-xs font-semibold text-purple-700 dark:text-purple-400 uppercase tracking-wide flex items-center gap-1.5">
-                        <Bot className="w-3.5 h-3.5" />AI Routing
+                  <div className="border-t border-slate-100 dark:border-slate-800" />
+
+                  {/* Category */}
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Category</p>
+                    {is3SCTeam ? (
+                      <select value={ticket.category} onChange={(e) => handleUpdateField('category', e.target.value)} disabled={updatingField === 'category'} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0052CC] disabled:opacity-50">
+                        <option value="FEATURE_REQUEST">Feature Request</option>
+                        <option value="BUG">Bug</option>
+                        <option value="DATA_ACCURACY">Data Accuracy</option>
+                        <option value="PERFORMANCE">Performance</option>
+                        <option value="ACCESS_SECURITY">Access/Security</option>
+                      </select>
+                    ) : (
+                      <span className="inline-block text-xs px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">{ticket.category.replace(/_/g, ' ')}</span>
+                    )}
+                    {is3SCTeam && ticket.aiCategory && ticket.aiCategory !== ticket.category && (
+                      <p className="text-xs text-purple-600 dark:text-purple-400 mt-1.5">🤖 AI suggested: {ticket.aiCategory.replace(/_/g, ' ')}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* AI Routing — 3SC team only */}
+                {is3SCTeam && ticket.aiCategory && (
+                  <div className="bg-gradient-to-br from-purple-50 to-white dark:from-purple-950/30 dark:to-slate-900 rounded-md border border-purple-200 dark:border-purple-800 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-purple-900 dark:text-purple-200 uppercase tracking-wide flex items-center gap-1.5">
+                        <Bot className="w-3.5 h-3.5" />AI vs Current
                       </p>
                       {isLead && (
-                        <button
-                          onClick={() => setAiOverride((v) => !v)}
-                          className="text-xs text-purple-600 dark:text-purple-400 hover:underline font-medium">
-                          {aiOverride ? 'Cancel' : 'Override'}
+                        <button onClick={() => setAiOverride((v) => !v)} className="text-xs bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 rounded font-medium transition">
+                          {aiOverride ? '✕ Cancel' : '✎ Override'}
                         </button>
                       )}
                     </div>
-                    <div className="space-y-1.5 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Category</span>
-                        <span className="font-medium text-slate-800 dark:text-slate-200">{ticket.aiCategory ?? '—'}</span>
+                    {!aiOverride && (
+                      <div className="space-y-2 text-xs">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="bg-white dark:bg-slate-800 p-2 rounded border border-purple-200 dark:border-purple-700">
+                            <p className="text-purple-600 dark:text-purple-400 font-semibold mb-1">🤖 AI</p>
+                            <p className="font-medium text-slate-900 dark:text-slate-100">{ticket.aiCategory?.replace(/_/g, ' ')}</p>
+                          </div>
+                          <div className="bg-white dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700">
+                            <p className="text-slate-600 dark:text-slate-400 font-semibold mb-1">✓ Current</p>
+                            <p className="font-medium text-slate-900 dark:text-slate-100">{ticket.category?.replace(/_/g, ' ')}</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="bg-white dark:bg-slate-800 p-2 rounded border border-purple-200 dark:border-purple-700">
+                            <p className="text-purple-600 dark:text-purple-400 font-semibold mb-1">🤖 Priority</p>
+                            <p className="font-medium text-slate-900 dark:text-slate-100">{ticket.aiPriority}</p>
+                          </div>
+                          <div className="bg-white dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700">
+                            <p className="text-slate-600 dark:text-slate-400 font-semibold mb-1">✓ Current</p>
+                            <p className="font-medium text-slate-900 dark:text-slate-100">{ticket.priority}</p>
+                          </div>
+                        </div>
+                        {ticket.aiSummary && (
+                          <div className="bg-white dark:bg-slate-800 p-2 rounded border-l-4 border-purple-500 text-slate-700 dark:text-slate-300 italic">
+                            💡 {ticket.aiSummary}
+                          </div>
+                        )}
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Priority</span>
-                        <span className="font-medium text-slate-800 dark:text-slate-200">{ticket.aiPriority ?? '—'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Suggested Agent</span>
-                        <span className="font-medium text-slate-800 dark:text-slate-200">{ticket.aiSuggestedAgent ?? '—'}</span>
-                      </div>
-                    </div>
+                    )}
                     {aiOverride && isLead && (
-                      <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
-                        <p className="text-xs text-slate-500 mb-1">Override AI decision by updating above fields directly.</p>
-                        <select
-                          onChange={(e) => handleUpdateField('assignee', e.target.value || null)}
-                          defaultValue=""
-                          className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded focus:outline-none focus:ring-2 focus:ring-purple-400 text-slate-800 dark:text-slate-200">
-                          <option value="">Override assignee...</option>
-                          {users.filter((u) => ['THREESC_AGENT', 'THREESC_LEAD'].includes(u.role)).map((u) => (
-                            <option key={u.id} value={u.id}>{u.name}</option>
-                          ))}
+                      <div className="space-y-2 pt-2 border-t border-purple-200 dark:border-purple-800">
+                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Override values:</p>
+                        <select value={ticket.category || ''} onChange={(e) => handleUpdateField('category', e.target.value)} disabled={updatingField === 'category'} className="w-full px-2.5 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-slate-900 dark:text-white disabled:opacity-50">
+                          <option value="FEATURE_REQUEST">Feature Request</option>
+                          <option value="BUG">Bug</option>
+                          <option value="DATA_ACCURACY">Data Accuracy</option>
+                          <option value="PERFORMANCE">Performance</option>
+                          <option value="ACCESS_SECURITY">Access/Security</option>
                         </select>
-                        <select
-                          onChange={(e) => { if (e.target.value) handleUpdateField('priority', e.target.value); }}
-                          defaultValue=""
-                          className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded focus:outline-none focus:ring-2 focus:ring-purple-400 text-slate-800 dark:text-slate-200">
-                          <option value="">Override priority...</option>
+                        <select value={ticket.priority || ''} onChange={(e) => handleUpdateField('priority', e.target.value)} disabled={updatingField === 'priority'} className="w-full px-2.5 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-slate-900 dark:text-white disabled:opacity-50">
                           <option value="CRITICAL">Critical</option>
                           <option value="HIGH">High</option>
                           <option value="MEDIUM">Medium</option>
@@ -1201,8 +1342,310 @@ export default function TicketDetailPage() {
                   </div>
                 )}
 
+                {/* Smart Assign — 3SC team only, only for active tickets */}
+                {is3SCTeam && !['RESOLVED', 'CLOSED'].includes(ticket.status) && (
+                  <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 overflow-hidden">
+                    {/* Header */}
+                    <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-md bg-[#0052CC] flex items-center justify-center">
+                          <User className="w-3.5 h-3.5 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">Smart Assign</p>
+                          <p className="text-[10px] text-slate-400">AI-powered by expertise &amp; workload</p>
+                        </div>
+                      </div>
+                      {routingAgents.length > 1 && (
+                        <button onClick={() => setRoutingExpanded(v => !v)} className="text-[10px] text-[#0052CC] dark:text-blue-400 font-medium hover:underline">
+                          {routingExpanded ? 'Show less' : `All ${routingAgents.length} agents`}
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="p-4">
+                      {routingLoading ? (
+                        <div className="flex items-center gap-2 py-2">
+                          <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+                          <span className="text-xs text-slate-400">AI analysing expertise &amp; workload…</span>
+                        </div>
+                      ) : routingBest ? (
+                        <div className="space-y-3">
+                          {/* AI summary chip */}
+                          {routingAiSummary && (
+                            <div className="flex items-start gap-1.5 bg-blue-50 dark:bg-blue-950/30 rounded-md px-3 py-2">
+                              <Bot className="w-3.5 h-3.5 text-[#0052CC] dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                              <p className="text-[10px] text-slate-600 dark:text-slate-300 leading-snug">{routingAiSummary}</p>
+                            </div>
+                          )}
+
+                          {/* Best agent card */}
+                          <div className="rounded-lg border-2 border-[#0052CC]/20 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="w-8 h-8 rounded-full bg-[#0747A6] text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                {getInitials(routingBest.name)}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{routingBest.name}</p>
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[#0052CC] text-white uppercase tracking-wide flex-shrink-0">Best Match</span>
+                                </div>
+                                <p className="text-[10px] text-slate-500 truncate">{routingBest.email}</p>
+                              </div>
+                            </div>
+
+                            {/* AI reason */}
+                            {routingBest.aiReason && (
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 italic mb-2 leading-snug">"{routingBest.aiReason}"</p>
+                            )}
+
+                            {/* Stats grid */}
+                            <div className="grid grid-cols-2 gap-2 mb-3">
+                              <div className="bg-white dark:bg-slate-800 rounded p-2 text-center">
+                                <p className="text-base font-bold text-[#0052CC] dark:text-blue-400">{routingBest.categoryResolved}</p>
+                                <p className="text-[10px] text-slate-500 leading-tight">{ticket?.category?.replace(/_/g, ' ')} resolved</p>
+                              </div>
+                              <div className="bg-white dark:bg-slate-800 rounded p-2 text-center">
+                                <p className={`text-base font-bold ${routingBest.openCount <= 3 ? 'text-emerald-600' : routingBest.openCount <= 6 ? 'text-amber-500' : 'text-red-500'}`}>
+                                  {routingBest.openCount}
+                                </p>
+                                <p className="text-[10px] text-slate-500 leading-tight">open tickets</p>
+                              </div>
+                            </div>
+
+                            {/* Expertise label + avg resolution */}
+                            <div className="flex items-center justify-between mb-3">
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                                routingBest.expertiseLabel === 'Expert' ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300' :
+                                routingBest.expertiseLabel === 'Experienced' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' :
+                                routingBest.expertiseLabel === 'Familiar' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' :
+                                'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                              }`}>
+                                {routingBest.expertiseLabel}
+                              </span>
+                              {routingBest.avgResolutionHrs !== null && (
+                                <span className="text-[10px] text-slate-400">~{routingBest.avgResolutionHrs}h avg resolve</span>
+                              )}
+                            </div>
+
+                            {/* Assign button */}
+                            <button
+                              onClick={() => handleUpdateField('assignee', routingBest.id)}
+                              disabled={updatingField === 'assignee' || ticket?.assignedTo?.id === routingBest.id}
+                              className={`w-full py-2 text-xs font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5 ${
+                                ticket?.assignedTo?.id === routingBest.id
+                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 cursor-default'
+                                  : 'bg-[#0052CC] hover:bg-[#0747A6] text-white disabled:opacity-50'
+                              }`}
+                            >
+                              {updatingField === 'assignee' ? (
+                                <><Loader2 className="w-3 h-3 animate-spin" />Assigning…</>
+                              ) : ticket?.assignedTo?.id === routingBest.id ? (
+                                <>✓ Currently Assigned</>
+                              ) : (
+                                <>Assign to {routingBest.name.split(' ')[0]}</>
+                              )}
+                            </button>
+                          </div>
+
+                          {/* Other agents (expanded) */}
+                          {routingExpanded && routingAgents.slice(1).map((agent) => (
+                            <div key={agent.id} className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 flex items-start gap-3">
+                              <div className="w-7 h-7 rounded-full bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
+                                {getInitials(agent.name)}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 mb-0.5">
+                                  <p className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate">{agent.name}</p>
+                                  <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                                    agent.expertiseLabel === 'Expert' ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300' :
+                                    agent.expertiseLabel === 'Experienced' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' :
+                                    agent.expertiseLabel === 'Familiar' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' :
+                                    'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                                  }`}>{agent.expertiseLabel}</span>
+                                </div>
+                                {agent.aiReason && (
+                                  <p className="text-[10px] text-slate-400 italic mb-1 leading-snug">"{agent.aiReason}"</p>
+                                )}
+                                <span className="text-[10px] text-slate-500">{agent.categoryResolved} resolved · {agent.openCount} open</span>
+                                {/* Workload bar */}
+                                <div className="w-full h-1 bg-slate-100 dark:bg-slate-700 rounded-full mt-1.5">
+                                  <div
+                                    className={`h-1 rounded-full transition-all ${agent.openCount <= 3 ? 'bg-emerald-400' : agent.openCount <= 6 ? 'bg-amber-400' : 'bg-red-400'}`}
+                                    style={{ width: `${Math.min(100, (agent.openCount / 10) * 100)}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => handleUpdateField('assignee', agent.id)}
+                                disabled={updatingField === 'assignee' || ticket?.assignedTo?.id === agent.id}
+                                className={`text-xs px-2.5 py-1 rounded font-medium flex-shrink-0 transition-colors ${
+                                  ticket?.assignedTo?.id === agent.id
+                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                    : 'bg-slate-100 hover:bg-[#0052CC] hover:text-white dark:bg-slate-700 dark:hover:bg-blue-700 text-slate-700 dark:text-slate-300'
+                                }`}
+                              >
+                                {ticket?.assignedTo?.id === agent.id ? '✓' : 'Assign'}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400 py-2 text-center">No agents available</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Resolution Time Prediction — 3SC team only */}
+                {is3SCTeam && (
+                  <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-md bg-emerald-600 flex items-center justify-center">
+                        <Clock className="w-3.5 h-3.5 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">Resolution Prediction</p>
+                        <p className="text-[10px] text-slate-400">AI + historical data</p>
+                      </div>
+                    </div>
+
+                    <div className="p-4">
+                      {predictionLoading ? (
+                        <div className="flex items-center gap-2 py-1">
+                          <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+                          <span className="text-xs text-slate-400">Calculating…</span>
+                        </div>
+                      ) : prediction?.displayLabel ? (
+                        <div className="space-y-3">
+                          {/* Main prediction */}
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{prediction.displayLabel}</p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">estimated resolution time</p>
+                            </div>
+                            <span className={`text-[10px] font-semibold px-2 py-1 rounded-full ${
+                              prediction.confidence === 'High' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' :
+                              prediction.confidence === 'Medium' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' :
+                              'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                            }`}>
+                              {prediction.confidence} confidence
+                            </span>
+                          </div>
+
+                          {/* Breakdown */}
+                          <div className="bg-slate-50 dark:bg-slate-800 rounded-md p-2.5 space-y-1.5">
+                            <div className="flex justify-between text-[10px]">
+                              <span className="text-slate-500">Global avg ({prediction.inputs.globalSampleSize} tickets)</span>
+                              <span className="font-medium text-slate-700 dark:text-slate-300">
+                                {prediction.inputs.globalAvgHrs !== null ? `${prediction.inputs.globalAvgHrs}h` : 'N/A'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-[10px]">
+                              <span className="text-slate-500">Agent personal avg</span>
+                              <span className="font-medium text-slate-700 dark:text-slate-300">
+                                {prediction.inputs.agentAvgHrs !== null ? `${prediction.inputs.agentAvgHrs}h` : 'No history'}
+                              </span>
+                            </div>
+                            {prediction.inputs.workloadPenaltyPct > 0 && (
+                              <div className="flex justify-between text-[10px]">
+                                <span className="text-amber-600 dark:text-amber-400">Workload penalty</span>
+                                <span className="font-medium text-amber-600 dark:text-amber-400">+{prediction.inputs.workloadPenaltyPct}%</span>
+                              </div>
+                            )}
+                            <div className="border-t border-slate-200 dark:border-slate-700 pt-1 flex justify-between text-[10px]">
+                              <span className="text-slate-500 font-semibold">Adjusted baseline</span>
+                              <span className="font-bold text-slate-800 dark:text-slate-200">
+                                {prediction.inputs.adjustedBaseline !== null ? `${prediction.inputs.adjustedBaseline}h` : 'N/A'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* AI reasoning */}
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug italic">
+                            "{prediction.breakdown}"
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400 py-1 text-center">Not enough data to predict</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Similar Resolved Tickets — 3SC team only */}
+                {is3SCTeam && (
+                  <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-md bg-blue-600 flex items-center justify-center">
+                        <Lightbulb className="w-3.5 h-3.5 text-white" />
+                      </div>
+                      <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">Similar Resolved</p>
+                    </div>
+
+                    <div className="p-3">
+                      {similarLoading ? (
+                        <div className="flex items-center gap-2 py-1">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                          <span className="text-[10px] text-slate-400">Searching…</span>
+                        </div>
+                      ) : similarResolutions.length > 0 ? (
+                        <div className="space-y-2">
+                          {similarResolutions.map((sim) => (
+                            <div key={sim.id} className="p-2 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 space-y-2">
+                              <button
+                                onClick={() => router.push(`/tickets/${sim.ticketKey ?? sim.id}`)}
+                                className="w-full text-left group"
+                              >
+                                <div className="flex items-start justify-between gap-2 mb-1">
+                                  <p className="text-[10px] font-medium text-slate-900 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 line-clamp-2 flex-1">
+                                    {sim.title}
+                                  </p>
+                                  <span className="text-[9px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 px-1.5 py-0.5 rounded flex-shrink-0">
+                                    {sim.similarityScore}%
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-[9px] text-slate-500">
+                                  <span className="inline-block px-1 py-0.5 bg-slate-100 dark:bg-slate-800 rounded">
+                                    {sim.category.replace(/_/g, " ")}
+                                  </span>
+                                  <span>•</span>
+                                  <span>{sim.priority}</span>
+                                </div>
+                              </button>
+                              {sim.resolutionHints && sim.resolutionHints.length > 0 && (
+                                <div className="pt-1 border-t border-slate-200 dark:border-slate-700">
+                                  <p className="text-[9px] font-semibold text-slate-700 dark:text-slate-300 mb-1">How it was resolved:</p>
+                                  <p className="text-[9px] text-slate-600 dark:text-slate-400 line-clamp-3 leading-relaxed">
+                                    {sim.resolutionHints[0]}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-slate-400 py-2 text-center">No similar resolved tickets</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Escalation — Lead only */}
+                {isLead && (
+                  <div className="bg-white dark:bg-slate-900 rounded-md border border-amber-200 dark:border-amber-800 p-4">
+                    <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><TriangleAlert className="w-3.5 h-3.5" />Escalate Issue</p>
+                    {ticket.escalated && <span className="inline-block mb-2 text-xs bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 px-2 py-0.5 rounded font-semibold">Already escalated</span>}
+                    {escalationSuccess && <p className="text-xs text-emerald-600 mb-2 font-medium">Escalation recorded successfully.</p>}
+                    <textarea placeholder="Add escalation note (optional)..." value={escalationNote} onChange={(e) => setEscalationNote(e.target.value)} rows={2} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none mb-2" />
+                    <button onClick={handleEscalate} disabled={escalating} className="w-full py-1.5 text-xs bg-amber-500 hover:bg-amber-600 text-white rounded font-semibold disabled:opacity-50 flex items-center justify-center gap-1">
+                      {escalating ? <Loader2 className="w-3 h-3 animate-spin" /> : <TriangleAlert className="w-3 h-3" />}
+                      {escalating ? 'Escalating...' : 'Mark as Escalated'}
+                    </button>
+                  </div>
+                )}
+
               </div>
-            </div>
           </div>
         </div>
       </div>

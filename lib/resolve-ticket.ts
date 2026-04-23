@@ -5,18 +5,17 @@ import { prisma } from "@/lib/prisma";
  * Returns the internal UUID id.
  */
 export async function resolveTicketId(idOrKey: string): Promise<string | null> {
-  // ticketKey pattern: uppercase letters + hyphen + digits
-  if (/^[A-Z]+-\d+$/.test(idOrKey)) {
-    const issue = await prisma.issue.findUnique({
-      where: { ticketKey: idOrKey },
-      select: { id: true },
-    });
-    return issue?.id ?? null;
-  }
-  // Otherwise treat as internal cuid
-  const issue = await prisma.issue.findUnique({
+  // Always try ticketKey first (handles any format including legacy malformed keys)
+  const byKey = await prisma.issue.findUnique({
+    where: { ticketKey: idOrKey },
+    select: { id: true },
+  });
+  if (byKey) return byKey.id;
+
+  // Fall back to internal cuid
+  const byId = await prisma.issue.findUnique({
     where: { id: idOrKey },
     select: { id: true },
   });
-  return issue?.id ?? null;
+  return byId?.id ?? null;
 }

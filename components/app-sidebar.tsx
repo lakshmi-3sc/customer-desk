@@ -113,7 +113,8 @@ export function AppSidebar() {
         </div>
       </div>
 
-      {/* Create Button */}
+      {/* Create Button — clients only */}
+      {!is3SCTeam && (
       <div className="px-3 pt-4 pb-2 flex-shrink-0">
         <Link
           href="/create-ticket"
@@ -128,6 +129,7 @@ export function AppSidebar() {
           Create Ticket
         </Link>
       </div>
+      )}
 
       {/* Navigation */}
       <nav className="flex-1 py-2 px-2 overflow-y-auto space-y-0.5">

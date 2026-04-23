@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { generateTicketKey } from "@/lib/ticket-key";
+import { classifyIssue } from "@/lib/ai/classify-issue";
+import { computeSimilarResolutions } from "@/lib/compute-similar-resolutions";
 
 export async function POST(req: NextRequest) {
   try {
@@ -71,6 +73,24 @@ export async function POST(req: NextRequest) {
         ticketKey,
       },
     });
+
+    // Await AI classification so fields are ready when user lands on the ticket page
+    try {
+      const result = await classifyIssue(title, description);
+      await prisma.issue.update({
+        where: { id: ticket.id },
+        data: {
+          aiCategory: result.category,
+          aiPriority: result.priority,
+          aiSummary: `${result.reasoning}${result.module ? ` · Module: ${result.module}` : ""}`,
+        },
+      });
+    } catch (e) {
+      console.error("AI classify failed:", e);
+    }
+
+    // Compute and store similar resolved tickets in background
+    computeSimilarResolutions(ticket.id).catch(e => console.error("Similar resolutions failed:", e));
 
     return NextResponse.json(
       {

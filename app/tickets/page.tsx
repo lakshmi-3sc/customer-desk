@@ -109,7 +109,7 @@ function TicketsContent() {
   const [bulkAgent, setBulkAgent] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
 
-  const statusParam = searchParams.get('status') || 'OPEN';
+  const statusParam = searchParams.get('status') || 'ALL';
   const searchQuery = searchParams.get('search') || '';
 
   const filteredTickets = tickets.filter((t) => {

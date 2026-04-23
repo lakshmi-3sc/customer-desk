@@ -19,6 +19,7 @@ export async function generateTicketKey(
       prefix = project.name
         .split(/\s+/)
         .map((w) => w[0] ?? "")
+        .filter((c) => /[A-Za-z]/.test(c))
         .join("")
         .toUpperCase()
         .slice(0, 4);

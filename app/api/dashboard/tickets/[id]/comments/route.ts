@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveTicketId } from "@/lib/resolve-ticket";
+import { extractMentions, findUserByMention, createNotification } from "@/lib/notifications";
 
 export async function GET(
   req: NextRequest,
@@ -116,6 +117,27 @@ export async function POST(
         },
       },
     });
+
+    // Handle @mention notifications
+    const mentions = extractMentions(text);
+    for (const mention of mentions) {
+      const mentionedUser = await findUserByMention(mention);
+      if (!mentionedUser || mentionedUser.id === session.user.id) continue;
+
+      // For internal comments, only notify 3SC team
+      if (markInternal && !["THREESC_ADMIN", "THREESC_LEAD", "THREESC_AGENT"].includes(mentionedUser.role)) {
+        continue;
+      }
+
+      const messagePreview = text.length > 100 ? text.substring(0, 100) + "..." : text;
+      await createNotification(
+        mentionedUser.id,
+        "NEW_COMMENT",
+        `${session.user.name} mentioned you`,
+        `"${messagePreview}"`,
+        id
+      );
+    }
 
     return NextResponse.json({ comment }, { status: 201 });
   } catch (error) {

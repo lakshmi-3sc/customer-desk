@@ -20,6 +20,16 @@ export async function GET(request: NextRequest) {
     const role = currentUser.role;
     const is3SC = ["THREESC_ADMIN", "THREESC_LEAD", "THREESC_AGENT"].includes(role);
 
+    // Fetch in-app notifications directly from Notification model
+    const userNotifications = await prisma.notification.findMany({
+      where: { userId: currentUser.id },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+      include: {
+        issue: { select: { id: true, ticketKey: true, title: true } },
+      },
+    });
+
     // Scope issues: CLIENT_USER sees own, CLIENT_ADMIN sees client, 3SC sees all
     let issueWhere: any = {};
     if (role === "CLIENT_USER") {
@@ -63,7 +73,7 @@ export async function GET(request: NextRequest) {
     // Build notification objects
     type Notif = {
       id: string;
-      type: "status_change" | "field_change" | "comment" | "sla";
+      type: "status_change" | "field_change" | "comment" | "sla" | "NEW_COMMENT" | "ISSUE_ASSIGNED" | "STATUS_UPDATED" | "SLA_WARNING" | "ESCALATION" | "ISSUE_RESOLVED";
       title: string;
       body: string;
       issueKey: string | null;
@@ -72,6 +82,19 @@ export async function GET(request: NextRequest) {
     };
 
     const notifications: Notif[] = [];
+
+    // Add in-app notifications from Notification model
+    for (const notif of userNotifications) {
+      notifications.push({
+        id: notif.id,
+        type: notif.type as any,
+        title: notif.title,
+        body: notif.message,
+        issueKey: notif.issue?.ticketKey ?? null,
+        issueId: notif.issueId ?? notif.issue?.id ?? "",
+        createdAt: notif.createdAt.toISOString(),
+      });
+    }
 
     for (const h of history) {
       if (h.fieldChanged === "status") {

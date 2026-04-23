@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { resolveTicketId } from "@/lib/resolve-ticket";
+import { createNotification, getStatusChangeRecipients } from "@/lib/notifications";
 import type { Server } from "socket.io";
 
 export async function PUT(
@@ -57,7 +58,7 @@ export async function PUT(
 
     // Parse request body
     const body = await request.json();
-    const { assignedToId, status } = body;
+    const { assignedToId, status, priority, category } = body;
 
     // Prepare update data
     const updateData: any = {};
@@ -81,6 +82,24 @@ export async function PUT(
 
         updateData.assignedToId = assignedToId;
       }
+    }
+
+    // Update priority if provided
+    if (priority !== undefined) {
+      const validPriorities = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+      if (!validPriorities.includes(priority)) {
+        return NextResponse.json({ error: "Invalid priority" }, { status: 400 });
+      }
+      updateData.priority = priority;
+    }
+
+    // Update category if provided
+    if (category !== undefined) {
+      const validCategories = ["FEATURE_REQUEST", "BUG", "DATA_ACCURACY", "PERFORMANCE", "ACCESS_SECURITY"];
+      if (!validCategories.includes(category)) {
+        return NextResponse.json({ error: "Invalid category" }, { status: 400 });
+      }
+      updateData.category = category;
     }
 
     // Update status if provided
@@ -118,6 +137,33 @@ export async function PUT(
         project: true,
       },
     });
+
+    // Create notifications for assignment changes
+    if (assignedToId !== undefined && assignedToId !== ticket.assignedToId) {
+      if (assignedToId !== null) {
+        await createNotification(
+          assignedToId,
+          "ISSUE_ASSIGNED",
+          `${currentUser.name} assigned this to you`,
+          `${updatedTicket.title} - ${updatedTicket.category}`,
+          id
+        );
+      }
+    }
+
+    // Create notifications for status changes
+    if (status !== undefined && status !== ticket.status) {
+      const recipients = await getStatusChangeRecipients(id, currentUser.id);
+      for (const recipientId of recipients) {
+        await createNotification(
+          recipientId,
+          "STATUS_UPDATED",
+          `Status changed to ${status}`,
+          `${updatedTicket.title} - ${ticket.status} → ${status}`,
+          id
+        );
+      }
+    }
 
     // Broadcast update to all subscribers via Socket.IO
     const io: Server | undefined = (global as any).__socketio;

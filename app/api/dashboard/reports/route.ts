@@ -83,7 +83,7 @@ export async function GET() {
     }));
 
     // Category breakdown
-    const categories = ["BUG", "FEATURE_REQUEST", "DELIVERY", "BILLING", "GENERAL", "TECHNICAL"] as const;
+    const categories = ["BUG", "FEATURE_REQUEST", "DATA_ACCURACY", "PERFORMANCE", "ACCESS_SECURITY"] as const;
     const categoryCounts = await Promise.all(
       categories.map((c) =>
         prisma.issue.count({ where: { ...whereBase, category: c } })

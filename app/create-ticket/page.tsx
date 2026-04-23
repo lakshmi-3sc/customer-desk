@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ChevronRight, Paperclip, Loader2, X, AlertCircle, CheckCircle, Upload, Zap } from "lucide-react";
+import { ChevronRight, Paperclip, Loader2, X, AlertCircle, CheckCircle, Upload } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
@@ -21,10 +21,18 @@ export default function CreateTicketPage() {
   const { data: session } = useSession();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const userRole = session?.user?.role as string | undefined;
+  const is3SCTeam = userRole && ["THREESC_ADMIN", "THREESC_LEAD", "THREESC_AGENT"].includes(userRole);
+
+  // Redirect 3SC team away — they don't raise tickets
+  useEffect(() => {
+    if (is3SCTeam) router.replace("/tickets");
+  }, [is3SCTeam, router]);
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("MEDIUM");
-  const [category, setCategory] = useState("GENERAL");
+  const [category, setCategory] = useState("BUG");
   const [projectId, setProjectId] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
@@ -32,13 +40,6 @@ export default function CreateTicketPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isDragging, setIsDragging] = useState(false);
-  const [aiSuggestion, setAiSuggestion] = useState("");
-  const [kbSuggestions, setKbSuggestions] = useState<any[]>([]);
-  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(new Set());
-  const [aiResolved, setAiResolved] = useState(false);
-
-  const isClientUser = session?.user?.role === 'CLIENT_USER';
-  const showAiPanel = isClientUser && kbSuggestions.filter(s => !dismissedSuggestions.has(s.slug)).length > 0 && !aiResolved;
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -83,40 +84,6 @@ export default function CreateTicketPage() {
 
   const handleDragLeave = () => setIsDragging(false);
 
-  // AI suggestion: fires when title has >= 4 words (CLIENT_USER only: fetch KB articles)
-  useEffect(() => {
-    const words = title.trim().split(/\s+/).filter(Boolean);
-    if (words.length >= 4) {
-      const timer = setTimeout(async () => {
-        if (isClientUser) {
-          try {
-            const res = await fetch(`/api/knowledge-base?q=${encodeURIComponent(title)}`);
-            if (res.ok) {
-              const data = await res.json();
-              setKbSuggestions((data.articles || []).slice(0, 2));
-            }
-          } catch {
-            // fallback: show static suggestions
-            setKbSuggestions([
-              { slug: 'raising-issues-best-practices', title: 'Best Practices for Raising Issues', summary: 'Tips to get faster resolutions by providing the right information upfront.', category: 'Technical' },
-              { slug: 'technical-troubleshooting', title: 'Technical Troubleshooting Guide', summary: 'Step-by-step guide to diagnose common technical problems before raising a ticket.', category: 'Technical' },
-            ]);
-          }
-        } else {
-          setAiSuggestion(
-            `Similar issues found: "${words.slice(0, 3).join(' ')}..." — check existing tickets before submitting to avoid duplicates.`
-          );
-        }
-      }, 600);
-      return () => clearTimeout(timer);
-    } else {
-      setAiSuggestion("");
-      setKbSuggestions([]);
-      setDismissedSuggestions(new Set());
-      setAiResolved(false);
-    }
-  }, [title, isClientUser]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -137,7 +104,7 @@ export default function CreateTicketPage() {
       if (res.ok) {
         const data = await res.json();
         setSuccess(`Issue created: ${data.ticketId ?? ""}`);
-        setTimeout(() => router.push(`/tickets/${data.ticketId ?? ""}`), 1800);
+        router.push(`/tickets/${data.ticketId ?? ""}`);
       } else {
         setError("Failed to create issue. Please try again.");
       }
@@ -164,11 +131,11 @@ export default function CreateTicketPage() {
   ];
 
   const CATEGORIES = [
-    { value: "GENERAL", label: "General" },
     { value: "BUG", label: "Bug" },
     { value: "FEATURE_REQUEST", label: "Feature Request" },
-    { value: "BILLING", label: "Billing" },
-    { value: "TECHNICAL", label: "Technical" },
+    { value: "DATA_ACCURACY", label: "Data Accuracy" },
+    { value: "PERFORMANCE", label: "Performance" },
+    { value: "ACCESS_SECURITY", label: "Access & Security" },
   ];
 
   return (
@@ -201,7 +168,7 @@ export default function CreateTicketPage() {
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto p-6">
-          <div className={showAiPanel ? "max-w-6xl mx-auto" : "max-w-3xl mx-auto"}>
+          <div className="max-w-3xl mx-auto">
             <div className="mb-6">
               <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">
                 Create Issue
@@ -225,9 +192,7 @@ export default function CreateTicketPage() {
               </div>
             )}
 
-            <div className={showAiPanel ? "grid grid-cols-3 gap-6 items-start" : ""}>
-              {/* Left: form */}
-              <div className={showAiPanel ? "col-span-2" : ""}>
+            <div>
             <form onSubmit={handleSubmit} className="space-y-5">
               {/* Project selector — most important, shown first */}
               <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-5">
@@ -374,24 +339,6 @@ export default function CreateTicketPage() {
                 )}
               </div>
 
-              {/* AI Suggestion Banner — non-CLIENT_USER */}
-              {!isClientUser && aiSuggestion && (
-                <div className="flex items-start gap-3 px-4 py-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30">
-                  <Zap className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">AI Suggestion</p>
-                    <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">{aiSuggestion}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => router.push('/tickets')}
-                    className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 whitespace-nowrap"
-                  >
-                    Browse issues
-                  </button>
-                </div>
-              )}
-
               {/* Actions */}
               <div className="flex items-center justify-end gap-3 pt-1">
                 <Button
@@ -415,52 +362,6 @@ export default function CreateTicketPage() {
                 </Button>
               </div>
             </form>
-              </div>
-
-              {/* Right: AI panel for CLIENT_USER */}
-              {showAiPanel && (
-                <div className="col-span-1">
-                  <div className="bg-white dark:bg-slate-900 rounded-lg border border-blue-200 dark:border-blue-700 shadow-sm sticky top-0">
-                    <div className="px-4 py-3 border-b border-blue-100 dark:border-blue-800 flex items-center gap-2 bg-blue-50 dark:bg-blue-950/40 rounded-t-lg">
-                      <Zap className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                      <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
-                        We found {kbSuggestions.filter(s => !dismissedSuggestions.has(s.slug)).length} similar resolved issue{kbSuggestions.filter(s => !dismissedSuggestions.has(s.slug)).length !== 1 ? 's' : ''}
-                      </p>
-                    </div>
-                    <div className="p-3 space-y-3">
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Would any of these help resolve your issue?</p>
-                      {kbSuggestions
-                        .filter(s => !dismissedSuggestions.has(s.slug))
-                        .map((article) => (
-                          <div key={article.slug} className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3">
-                            <p className="text-sm font-medium text-slate-800 dark:text-slate-200 mb-1 leading-snug">
-                              {article.title}
-                            </p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 line-clamp-2">
-                              {article.summary}
-                            </p>
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => { setAiResolved(true); router.push(`/knowledge-base/${article.slug}`); }}
-                                className="flex-1 text-xs px-2 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-md font-medium transition-colors"
-                              >
-                                ✓ Yes, resolved
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setDismissedSuggestions(prev => new Set([...prev, article.slug]))}
-                                className="flex-1 text-xs px-2 py-1.5 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-md font-medium transition-colors"
-                              >
-                                No, continue
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </main>
