@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
@@ -11,18 +12,23 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const days = parseInt(searchParams.get('days') || '30');
+  const clientId = searchParams.get('clientId') || null;
 
   const since = new Date(Date.now() - days * 86400000);
+
+  const clientWhere = clientId ? { clientId } : {};
 
   const [issuesByDay, issuesByClient, agentStats] = await Promise.all([
     prisma.$queryRaw<{ day: string; count: bigint }[]>`
       SELECT DATE("createdAt") as day, COUNT(*) as count
       FROM "Issue"
       WHERE "createdAt" >= ${since}
+      ${clientId ? Prisma.sql`AND "clientId" = ${clientId}` : Prisma.empty}
       GROUP BY DATE("createdAt")
       ORDER BY day ASC
     `,
     prisma.client.findMany({
+      where: clientId ? { id: clientId } : {},
       select: {
         id: true,
         name: true,

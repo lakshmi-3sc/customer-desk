@@ -156,6 +156,7 @@ model SimilarResolution {
 model IssueAttachment {
   id         String   @id @default(cuid())
   issueId    String
+  commentId  String?
   uploadedBy String
   fileName   String
   fileUrl    String
@@ -163,6 +164,7 @@ model IssueAttachment {
   fileType   String?
   createdAt  DateTime @default(now())
   issue      Issue    @relation(fields: [issueId], references: [id])
+  comment    Comment? @relation(fields: [commentId], references: [id])
 }
 
 model Comment {
@@ -179,6 +181,7 @@ model Comment {
   issue         Issue     @relation(fields: [issueId], references: [id])
   parent        Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
   replies       Comment[] @relation("CommentReplies")
+  attachments   IssueAttachment[]
 }
 
 model Notification {

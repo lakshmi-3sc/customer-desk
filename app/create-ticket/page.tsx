@@ -14,6 +14,8 @@ interface Attachment {
   id: string;
   name: string;
   size: number;
+  type?: string;
+  file?: File;
 }
 
 export default function CreateTicketPage() {
@@ -66,7 +68,13 @@ export default function CreateTicketPage() {
     files.forEach((file) => {
       setAttachments((prev) => [
         ...prev,
-        { id: Math.random().toString(36).substr(2, 9), name: file.name, size: file.size },
+        {
+          id: Math.random().toString(36).substr(2, 9),
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          file: file
+        },
       ]);
     });
   };
@@ -98,7 +106,18 @@ export default function CreateTicketPage() {
       const res = await fetch("/api/dashboard/tickets/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, description, priority, category, projectId, attachments: attachments.map((a) => a.name) }),
+        body: JSON.stringify({
+          title,
+          description,
+          priority,
+          category,
+          projectId,
+          attachments: attachments.map((a) => ({
+            name: a.name,
+            size: a.size,
+            type: a.type || 'application/octet-stream'
+          }))
+        }),
       });
 
       if (res.ok) {

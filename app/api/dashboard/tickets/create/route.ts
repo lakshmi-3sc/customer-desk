@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateTicketKey } from "@/lib/ticket-key";
 import { classifyIssue } from "@/lib/ai/classify-issue";
 import { computeSimilarResolutions } from "@/lib/compute-similar-resolutions";
+import { calculateSLADeadline } from "@/lib/sla";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { title, description, priority, category, projectId } =
+    const { title, description, priority, category, projectId, attachments } =
       await req.json();
 
     if (!title || !description) {
@@ -89,7 +90,24 @@ export async function POST(req: NextRequest) {
       console.error("AI classify failed:", e);
     }
 
-    // Compute and store similar resolved tickets in background
+    // Save attachments if provided
+    if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+      await prisma.issueAttachment.createMany({
+        data: attachments.map((att: any) => ({
+          issueId: ticket.id,
+          uploadedBy: session.user.id,
+          fileName: att.name,
+          fileUrl: `/api/attachments/${ticket.id}/${att.name}`, // Reference to file storage API
+          fileSize: att.size,
+          fileType: att.type || 'application/octet-stream',
+        })),
+      });
+    }
+
+    // Calculate SLA deadline
+    await calculateSLADeadline(ticket.id);
+
+    // Compute similar resolutions in background
     computeSimilarResolutions(ticket.id).catch(e => console.error("Similar resolutions failed:", e));
 
     return NextResponse.json(

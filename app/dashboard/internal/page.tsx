@@ -169,8 +169,6 @@ export default function InternalDashboard() {
   useEffect(() => {
     fetchKPI();
     fetchTickets();
-    const interval = setInterval(fetchTickets, 30000);
-    return () => clearInterval(interval);
   }, []);
 
   // Real-time updates via Socket.IO

@@ -195,8 +195,6 @@ export default function ClientDashboard() {
     fetchTickets();
     fetchReports();
     fetchActivity();
-    const interval = setInterval(fetchTickets, 30000);
-    return () => clearInterval(interval);
   }, []);
 
   // Real-time updates via Socket.IO

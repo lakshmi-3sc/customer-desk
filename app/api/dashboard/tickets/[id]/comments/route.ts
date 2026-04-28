@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveTicketId } from "@/lib/resolve-ticket";
-import { extractMentions, findUserByMention, createNotification } from "@/lib/notifications";
+import { extractMentions, findUserByMention, createNotification, isUserMentionable } from "@/lib/notifications";
 
 export async function GET(
   req: NextRequest,
@@ -69,7 +69,7 @@ export async function POST(
     const { id: idOrKey } = await params;
     const id = await resolveTicketId(idOrKey);
     if (!id) return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
-    const { text, parentId, isInternal } = await req.json();
+    const { text, parentId, isInternal, attachments } = await req.json();
     if (!text || !text.trim()) {
       return NextResponse.json(
         { error: "Comment text is required" },
@@ -118,11 +118,18 @@ export async function POST(
       },
     });
 
-    // Handle @mention notifications
+    // Handle @mention notifications with client-aware filtering
     const mentions = extractMentions(text);
     for (const mention of mentions) {
       const mentionedUser = await findUserByMention(mention);
       if (!mentionedUser || mentionedUser.id === session.user.id) continue;
+
+      // Validate that the mentioned user is mentionable by the current user
+      const isMentionable = await isUserMentionable(mentionedUser.id, session.user.id, id);
+      if (!isMentionable) {
+        // Silently skip non-mentionable users (e.g., users from other clients)
+        continue;
+      }
 
       // For internal comments, only notify 3SC team
       if (markInternal && !["THREESC_ADMIN", "THREESC_LEAD", "THREESC_AGENT"].includes(mentionedUser.role)) {
@@ -137,6 +144,20 @@ export async function POST(
         `"${messagePreview}"`,
         id
       );
+    }
+
+    // Save attachments if provided
+    if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+      await prisma.issueAttachment.createMany({
+        data: attachments.map((att: any) => ({
+          issueId: id,
+          uploadedBy: session.user.id,
+          fileName: att.name,
+          fileUrl: `/api/attachments/${id}/${att.name}`, // Reference to file storage API
+          fileSize: att.size,
+          fileType: att.type || 'application/octet-stream',
+        })),
+      });
     }
 
     return NextResponse.json({ comment }, { status: 201 });

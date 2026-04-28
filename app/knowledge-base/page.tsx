@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
-import { NotificationBell } from "@/components/notification-bell";
 
 const CATEGORIES = [
   { key: "Billing", label: "Billing FAQ", icon: CreditCard, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800" },
@@ -76,7 +75,6 @@ export default function KnowledgeBasePage() {
               <span className="text-slate-600 dark:text-slate-400 font-semibold">Knowledge Base</span>
             </nav>
           }
-          right={<NotificationBell />}
         />
 
         <main className="flex-1 overflow-y-auto">

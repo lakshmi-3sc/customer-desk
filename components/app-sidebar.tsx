@@ -1,6 +1,6 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
@@ -10,7 +10,6 @@ import {
   Clock,
   CheckCircle,
   List,
-  LogOut,
   ChevronDown,
   ChevronRight,
   Ticket,
@@ -30,7 +29,6 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { useState } from "react";
-import { ThemeSwitcher } from "./theme-switcher";
 import { cn } from "@/lib/utils";
 
 interface NavItemProps {
@@ -74,16 +72,6 @@ export function AppSidebar() {
   const is3SCTeam =
     userRole &&
     ["THREESC_ADMIN", "THREESC_LEAD", "THREESC_AGENT"].includes(userRole);
-
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return "U";
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  };
 
   const isClientUser = userRole === "CLIENT_USER";
   const isClientAdmin = userRole === "CLIENT_ADMIN";
@@ -332,41 +320,6 @@ export function AppSidebar() {
         )}
       </nav>
 
-      {/* Divider */}
-      <div className="px-3 pb-1 flex-shrink-0">
-        <div className="border-t border-white/10 dark:border-slate-700" />
-      </div>
-
-      {/* Bottom section */}
-      <div className="px-2 pb-3 flex-shrink-0 space-y-1">
-        {/* Theme switcher row */}
-        <div className="flex items-center justify-between px-2 py-1">
-          <span className="text-blue-200 text-xs">Theme</span>
-          <ThemeSwitcher />
-        </div>
-
-        {/* User info */}
-        <div className="flex items-center gap-2.5 px-3 py-2 rounded-md hover:bg-white/10 transition-colors group">
-          <div className="w-7 h-7 bg-white/20 border border-white/30 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-            {getInitials(session?.user?.name)}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-white text-xs font-medium truncate leading-tight">
-              {session?.user?.name || "User"}
-            </p>
-            <p className="text-blue-200/70 text-[10px] truncate leading-tight capitalize">
-              {(session?.user?.role as string)?.toLowerCase().replace(/_/g, " ")}
-            </p>
-          </div>
-          <button
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            className="text-blue-200/60 hover:text-white transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
-            title="Sign out"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

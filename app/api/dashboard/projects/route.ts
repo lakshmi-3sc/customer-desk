@@ -42,6 +42,7 @@ export async function GET(req: NextRequest) {
           name: true,
           description: true,
           status: true,
+          clientId: true,
         },
         orderBy: { createdAt: "desc" },
       });
@@ -49,7 +50,20 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ projects });
     }
 
-    return NextResponse.json({ projects: [] });
+    // For 3SC team, return all projects from all clients
+    const projects = await prisma.project.findMany({
+      where: { status: "ACTIVE" },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        status: true,
+        clientId: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return NextResponse.json({ projects });
   } catch (error) {
     console.error("Error fetching projects:", error);
     return NextResponse.json(

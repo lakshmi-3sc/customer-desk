@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -26,13 +26,24 @@ import {
   AtSign,
   ExternalLink,
   Clock,
+  X,
 } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
-import { NotificationBell } from "@/components/notification-bell";
+import { SLACountdown } from "@/components/sla-countdown";
 import { getSocket } from "@/lib/socket-client";
+
+interface Attachment {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  fileSize: number | null;
+  fileType: string | null;
+  uploadedBy: string;
+  createdAt: string;
+}
 
 interface Ticket {
   id: string;
@@ -47,6 +58,7 @@ interface Ticket {
   slaDueAt: string | null;
   createdAt: string;
   updatedAt: string;
+  resolvedAt: string | null;
   raisedBy: { id: string; name: string; email: string };
   assignedTo: { id: string; name: string; email: string } | null;
   project: { id: string; name: string } | null;
@@ -54,8 +66,10 @@ interface Ticket {
   aiPriority: string | null;
   aiSuggestedAgent: string | null;
   aiSummary: string | null;
+  conversationSummary: string | null;
   escalated: boolean;
   client?: { id: string; name: string } | null;
+  attachments?: Attachment[];
 }
 
 const STATUS_STEPS = [
@@ -141,6 +155,14 @@ interface Comment {
   createdAt: string;
   parentId: string | null;
   replies?: Comment[];
+  attachments?: Array<{
+    id: string;
+    fileName: string;
+    fileUrl: string;
+    fileSize: number | null;
+    fileType: string | null;
+    createdAt: string;
+  }>;
 }
 
 const generateTicketKey = (project: { name: string } | null, ticketId: string): string => {
@@ -219,9 +241,10 @@ function CommentNode({
             <span className="text-xs text-slate-400">{formatDate(comment.createdAt)}</span>
           </div>
           <p className="text-sm text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 rounded p-3 break-words">{comment.content}</p>
+
           <button
             onClick={() => onReplyClick(comment.id, comment.author.name)}
-            className="mt-1.5 flex items-center gap-1 text-xs text-slate-400 hover:text-[#0052CC] dark:hover:text-blue-400 transition-colors"
+            className="mt-2 flex items-center gap-1 text-xs text-slate-400 hover:text-[#0052CC] dark:hover:text-blue-400 transition-colors"
           >
             <MessageSquare className="w-3 h-3" />
             {isReplying ? "Cancel" : "Reply"}
@@ -308,8 +331,11 @@ export default function TicketDetailPage() {
   const [loading, setLoading] = useState(true);
   const [submittingComment, setSubmittingComment] = useState(false);
   const [users, setUsers] = useState<UserType[]>([]);
+  const [mentionableUsers, setMentionableUsers] = useState<UserType[]>([]);
   const [updatingField, setUpdatingField] = useState<string | null>(null);
-  const [detailTab, setDetailTab] = useState<'conversation' | 'internal' | 'attachments' | 'ai-assist' | 'history'>('conversation');
+  const [detailTab, setDetailTab] = useState<'conversation' | 'internal' | 'attachments' | 'history'>('conversation');
+  const [commentAttachments, setCommentAttachments] = useState<File[]>([]);
+  const commentFileInputRef = useRef<HTMLInputElement>(null);
   const [ticketHistory, setTicketHistory] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [slaCountdown, setSlaCountdown] = useState<string>('');
@@ -327,11 +353,9 @@ export default function TicketDetailPage() {
   const [internalText, setInternalText] = useState('');
   const [submittingInternal, setSubmittingInternal] = useState(false);
 
-  // AI Assist state
-  type AiAssistData = { suggestedReply: string; threadSummary: string; predictedResolutionHrs: number; estimatedRemainingHrs: number; similarIssues: { id: string; ticketKey: string | null; title: string; clientName: string; resolvedAt: string | null }[] };
-  const [aiAssist, setAiAssist] = useState<AiAssistData | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiUsed, setAiUsed] = useState(false);
+  // Conversation summary state
+  const [conversationSummary, setConversationSummary] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const [emailNotify, setEmailNotify] = useState(true);
 
   // Smart routing state
@@ -428,6 +452,10 @@ export default function TicketDetailPage() {
         if (response.ok) {
           const data = await response.json();
           setTicket(data.ticket);
+          // Load existing conversation summary if available
+          if (data.ticket.conversationSummary) {
+            setConversationSummary(data.ticket.conversationSummary);
+          }
           const commentsResponse = await fetch(
             `/api/dashboard/tickets/${ticketId}/comments`,
           );
@@ -458,6 +486,13 @@ export default function TicketDetailPage() {
         if (usersResponse.ok) {
           const usersData = await usersResponse.json();
           setUsers(usersData);
+        }
+
+        // Fetch mentionable users for this ticket (client-aware)
+        const mentionableResponse = await fetch(`/api/dashboard/tickets/${ticketId}/mentionable-users`);
+        if (mentionableResponse.ok) {
+          const mentionableData = await mentionableResponse.json();
+          setMentionableUsers(mentionableData.users || []);
         }
       } catch (error) {
         console.error("Failed to fetch data:", error);
@@ -530,9 +565,9 @@ export default function TicketDetailPage() {
       return;
     }
 
-    // Filter users by name
+    // Filter mentionable users by name (client-aware)
     const query = afterAt.toLowerCase();
-    const filtered = users.filter(u =>
+    const filtered = mentionableUsers.filter(u =>
       u.name.toLowerCase().includes(query)
     ).slice(0, 5);
 
@@ -548,14 +583,41 @@ export default function TicketDetailPage() {
     setShowMentions(false);
   };
 
+  const handleCommentFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      setCommentAttachments((prev) => [...prev, ...Array.from(files)]);
+    }
+    if (commentFileInputRef.current) commentFileInputRef.current.value = '';
+  };
+
+  const removeCommentAttachment = (index: number) => {
+    setCommentAttachments((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!commentText.trim()) return;
+    if (!commentText.trim() && commentAttachments.length === 0) return;
     setSubmittingComment(true);
     try {
-      const comment = await postComment(commentText);
+      const response = await fetch(`/api/dashboard/tickets/${ticketId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: commentText,
+          attachments: commentAttachments.map((file) => ({
+            name: file.name,
+            size: file.size,
+            type: file.type,
+          })),
+        }),
+      });
+      if (!response.ok) throw new Error("Failed to post comment");
+      const data = await response.json();
+      const comment = data.comment as Comment;
       setComments((prev) => [...prev, { ...comment, replies: [] }]);
       setCommentText("");
+      setCommentAttachments([]);
     } catch (error) {
       console.error("Failed to add comment:", error);
     } finally {
@@ -674,13 +736,24 @@ export default function TicketDetailPage() {
       .finally(() => setPredictionLoading(false));
   }, [ticket?.id, ticket?.assignedTo?.id, is3SCTeam]);
 
-  const loadAiAssist = async () => {
-    if (!ticket || aiAssist) return;
-    setAiLoading(true);
+  const loadConversationSummary = async () => {
+    if (!ticket || conversationSummary) return;
+    setSummaryLoading(true);
     try {
-      const res = await fetch(`/api/agent/ai-assist?issueId=${ticket.id}`);
-      if (res.ok) setAiAssist(await res.json());
-    } catch {} finally { setAiLoading(false); }
+      const res = await fetch(`/api/dashboard/summarize-conversation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticketId: ticket.id })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setConversationSummary(data.summary);
+      }
+    } catch (e) {
+      console.error('Failed to generate summary:', e);
+    } finally {
+      setSummaryLoading(false);
+    }
   };
 
   const formatDate = (date: string) =>
@@ -734,15 +807,14 @@ export default function TicketDetailPage() {
               </span>
             </nav>
           }
-          right={<NotificationBell />}
         />
 
         {/* Main content */}
         <div className="flex-1 overflow-hidden">
-          <div className="h-full flex gap-6 px-6 py-6">
+          <div className="h-full flex gap-6 px-6 py-6 overflow-hidden">
 
               {/* Left column: ticket header + description + activity */}
-              <div className="flex-[2] min-w-0 overflow-y-auto space-y-4 pr-1">
+              <div className="flex-[2] min-w-0 overflow-y-auto pr-1">
 
                 {/* SLA banner */}
                 {(ticket.slaBreached || ticket.slaBreachRisk || ticket.slaDueAt) && (
@@ -846,23 +918,21 @@ export default function TicketDetailPage() {
                 </div>
 
                 {/* Activity / Comments — tabbed */}
-                <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800">
+                <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 flex flex-col">
                   {/* Tab switcher */}
                   <div className="flex border-b border-slate-200 dark:border-slate-800 px-4 pt-1 overflow-x-auto">
                     {([
                       { key: 'conversation', label: 'Conversation', icon: MessageSquare },
                       ...(is3SCTeam ? [{ key: 'internal', label: 'Internal Notes', icon: Lock }] : []),
                       { key: 'attachments', label: 'Attachments', icon: Paperclip },
-                      ...(is3SCTeam ? [{ key: 'ai-assist', label: 'AI Assist', icon: Bot }] : []),
                       { key: 'history', label: 'History', icon: History },
                     ] as const).map(({ key, label, icon: Icon }) => (
                       <button
                         key={key}
-                        onClick={() => { setDetailTab(key as typeof detailTab); if (key === 'ai-assist') loadAiAssist(); }}
+                        onClick={() => { setDetailTab(key as typeof detailTab); }}
                         className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                           detailTab === key
                             ? key === 'internal' ? 'border-amber-500 text-amber-700 dark:text-amber-400 dark:border-amber-500'
-                              : key === 'ai-assist' ? 'border-purple-500 text-purple-700 dark:text-purple-400 dark:border-purple-400'
                               : 'border-[#0052CC] text-[#0052CC] dark:text-blue-400 dark:border-blue-400'
                             : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
                         }`}
@@ -881,24 +951,41 @@ export default function TicketDetailPage() {
 
                   {/* Conversation tab */}
                   {detailTab === 'conversation' && (
-                    <div className="p-6">
-                      {comments.filter((c) => !c.isInternal).length > 3 && (
-                        <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800 flex items-center justify-between">
-                          <span className="text-xs text-blue-700 dark:text-blue-300">Many comments? Get a quick summary</span>
-                          <button
-                            onClick={async () => {
-                              const res = await fetch(`/api/dashboard/summarize-conversation`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ ticketId: ticket?.id })
-                              });
-                              const data = await res.json();
-                              alert(data.summary || 'Summary unavailable');
-                            }}
-                            className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline"
-                          >
-                            Summarize →
-                          </button>
+                    <div className="p-6 space-y-4">
+                      {/* Summarize Button */}
+                      {comments.filter((c) => !c.isInternal).length > 0 && (
+                        <button
+                          onClick={loadConversationSummary}
+                          disabled={summaryLoading || conversationSummary !== null}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/30 hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {summaryLoading ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
+                              <span className="text-xs font-medium text-purple-700 dark:text-purple-400">Generating summary...</span>
+                            </>
+                          ) : conversationSummary ? (
+                            <>
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                              <span className="text-xs font-medium text-emerald-600">Summary generated</span>
+                            </>
+                          ) : (
+                            <>
+                              <Bot className="w-4 h-4 text-purple-600" />
+                              <span className="text-xs font-medium text-purple-700 dark:text-purple-400">Summarize with AI</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+
+                      {/* Summary Display */}
+                      {conversationSummary && (
+                        <div className="p-4 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                          <p className="text-xs font-semibold text-purple-700 dark:text-purple-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                            <Lightbulb className="w-3.5 h-3.5" />
+                            AI Summary
+                          </p>
+                          <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{conversationSummary}</p>
                         </div>
                       )}
 
@@ -940,6 +1027,14 @@ export default function TicketDetailPage() {
                               rows={3}
                               className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0052CC] focus:border-[#0052CC] resize-none"
                             />
+                            {/* Hidden file input */}
+                            <input
+                              type="file"
+                              multiple
+                              ref={commentFileInputRef}
+                              onChange={handleCommentFileSelect}
+                              className="hidden"
+                            />
                             {showMentions && mentionSuggestions.length > 0 && (
                               <div className="absolute bottom-full left-0 mb-1 w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md shadow-lg z-10">
                                 {mentionSuggestions.map((user) => (
@@ -958,9 +1053,31 @@ export default function TicketDetailPage() {
                               </div>
                             )}
                           </div>
+                          {/* Selected attachments preview */}
+                          {commentAttachments.length > 0 && (
+                            <div className="space-y-2 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-md border border-slate-200 dark:border-slate-700">
+                              {commentAttachments.map((file, idx) => (
+                                <div key={idx} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                                  <Paperclip className="w-3.5 h-3.5 text-slate-400" />
+                                  <span className="truncate flex-1">{file.name}</span>
+                                  <span className="text-xs text-slate-500">({(file.size / 1024).toFixed(1)} KB)</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeCommentAttachment(idx)}
+                                    className="p-0.5 text-slate-400 hover:text-red-600 transition-colors"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <button type="button" title="Attach file"
+                              <button
+                                type="button"
+                                title="Attach file"
+                                onClick={() => commentFileInputRef.current?.click()}
                                 className="p-1.5 rounded text-slate-400 hover:text-[#0052CC] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                                 <Paperclip className="w-3.5 h-3.5" />
                               </button>
@@ -1039,98 +1156,39 @@ export default function TicketDetailPage() {
                     </div>
                   )}
 
-                  {/* AI Assist tab — 3SC only */}
-                  {detailTab === 'ai-assist' && is3SCTeam && (
-                    <div className="p-6 space-y-4">
-                      {aiLoading ? (
-                        <div className="flex items-center justify-center py-10 gap-2 text-slate-400">
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          <span className="text-sm">Generating AI insights...</span>
-                        </div>
-                      ) : !aiAssist ? (
-                        <div className="text-center py-8">
-                          <Bot className="w-10 h-10 mx-auto mb-3 text-purple-300 dark:text-purple-700" />
-                          <p className="text-sm text-slate-500 mb-3">AI Assist analyzes this issue and generates suggestions</p>
-                          <Button onClick={loadAiAssist} className="bg-purple-600 hover:bg-purple-700 text-white text-sm h-8 px-4">
-                            <Bot className="w-3.5 h-3.5 mr-1.5" />Load AI Suggestions
-                          </Button>
-                        </div>
-                      ) : (
-                        <>
-                          {/* Thread Summary */}
-                          <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
-                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                              <MessageSquare className="w-3.5 h-3.5" />Thread Summary
-                            </p>
-                            <p className="text-sm text-slate-700 dark:text-slate-300">{aiAssist.threadSummary}</p>
-                          </div>
-
-                          {/* Predicted resolution */}
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800 p-3 text-center">
-                              <p className="text-xs text-slate-500 mb-1">Predicted Resolution</p>
-                              <p className="text-xl font-black text-blue-700 dark:text-blue-400">{aiAssist.predictedResolutionHrs}h</p>
-                            </div>
-                            <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-lg border border-emerald-200 dark:border-emerald-800 p-3 text-center">
-                              <p className="text-xs text-slate-500 mb-1">Estimated Remaining</p>
-                              <p className="text-xl font-black text-emerald-700 dark:text-emerald-400">{aiAssist.estimatedRemainingHrs}h</p>
-                            </div>
-                          </div>
-
-                          {/* Suggested reply */}
-                          <div className="bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-200 dark:border-purple-800 p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <p className="text-xs font-semibold text-purple-700 dark:text-purple-400 uppercase tracking-wide flex items-center gap-1.5">
-                                <Lightbulb className="w-3.5 h-3.5" />Suggested Reply
-                              </p>
-                              <div className="flex items-center gap-1.5">
-                                <button onClick={() => navigator.clipboard?.writeText(aiAssist.suggestedReply)}
-                                  className="p-1 rounded text-purple-500 hover:bg-purple-100 dark:hover:bg-purple-900 transition-colors" title="Copy">
-                                  <Copy className="w-3 h-3" />
-                                </button>
-                                <button
-                                  onClick={() => { setCommentText(aiAssist.suggestedReply); setDetailTab('conversation'); setAiUsed(true); }}
-                                  className="flex items-center gap-1 text-xs text-white bg-purple-600 hover:bg-purple-700 px-2.5 py-1 rounded font-semibold transition-colors">
-                                  <Send className="w-3 h-3" />Use This
-                                </button>
-                              </div>
-                            </div>
-                            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{aiAssist.suggestedReply}</p>
-                            {aiUsed && <p className="mt-2 text-xs text-emerald-600 font-medium">Copied to reply box ✓</p>}
-                          </div>
-
-                          {/* Similar past issues */}
-                          {aiAssist.similarIssues.length > 0 && (
-                            <div>
-                              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                                <ExternalLink className="w-3.5 h-3.5" />Similar Past Issues
-                              </p>
-                              <div className="space-y-2">
-                                {aiAssist.similarIssues.map((s) => (
-                                  <button key={s.id} onClick={() => router.push(`/tickets/${s.ticketKey ?? s.id}`)}
-                                    className="w-full text-left flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                                    <span className="text-xs font-mono text-[#0052CC] dark:text-blue-400 font-bold">{s.ticketKey ?? s.id.slice(0, 8)}</span>
-                                    <span className="text-xs text-slate-700 dark:text-slate-300 flex-1 truncate">{s.title}</span>
-                                    <span className="text-[10px] text-slate-400">{s.clientName}</span>
-                                    <ExternalLink className="w-3 h-3 text-slate-300 flex-shrink-0" />
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Attachments tab */}
+{/* Attachments tab */}
                   {detailTab === 'attachments' && (
                     <div className="p-6">
-                      <div className="flex flex-col items-center justify-center py-10 text-center">
-                        <Paperclip className="w-8 h-8 text-slate-300 dark:text-slate-600 mb-3" />
-                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">No attachments</p>
-                        <p className="text-xs text-slate-400 mt-1">Files attached when creating the issue will appear here</p>
-                      </div>
+                      {!ticket?.attachments || ticket.attachments.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-10 text-center">
+                          <Paperclip className="w-8 h-8 text-slate-300 dark:text-slate-600 mb-3" />
+                          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">No attachments</p>
+                          <p className="text-xs text-slate-400 mt-1">Files attached when creating the issue will appear here</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {ticket.attachments.map((att) => (
+                            <div key={att.id} className="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                              <Paperclip className="w-4 h-4 text-slate-400" />
+                              <div className="flex-1 min-w-0">
+                                <a
+                                  href={att.fileUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-sm font-medium text-[#0052CC] dark:text-blue-400 hover:underline block truncate"
+                                  title={att.fileName}
+                                >
+                                  {att.fileName}
+                                </a>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                  {att.fileSize ? `${(att.fileSize / 1024).toFixed(1)} KB` : 'Unknown size'} • {new Date(att.createdAt).toLocaleDateString()}
+                                </p>
+                              </div>
+                              <ExternalLink className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
 

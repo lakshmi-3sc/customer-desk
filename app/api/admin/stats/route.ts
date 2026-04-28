@@ -9,6 +9,9 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const now = new Date();
+  const last60 = new Date(now.getTime() - 60 * 86400000);
+
   const [
     totalUsers,
     totalClients,
@@ -28,17 +31,17 @@ export async function GET() {
     prisma.issue.count({ where: { slaBreached: true } }),
     prisma.issue.count({ where: { status: { in: ['RESOLVED', 'CLOSED'] } } }),
     prisma.issue.count({
-      where: { createdAt: { gte: new Date(Date.now() - 30 * 86400000) } },
+      where: { createdAt: { gte: new Date(now.getTime() - 30 * 86400000) } },
     }),
     prisma.issue.count({
-      where: { createdAt: { gte: new Date(Date.now() - 60 * 86400000) } },
+      where: { createdAt: { gte: last60 } },
     }),
     // Issue volume per day for last 60 days
     prisma.$queryRaw<{ day: string; count: bigint }[]>`
-      SELECT DATE("createdAt") as day, COUNT(*) as count
+      SELECT TO_CHAR(DATE("createdAt" AT TIME ZONE 'UTC'), 'YYYY-MM-DD') as day, COUNT(*) as count
       FROM "Issue"
-      WHERE "createdAt" >= NOW() - INTERVAL '60 days'
-      GROUP BY DATE("createdAt")
+      WHERE "createdAt" >= ${last60}
+      GROUP BY DATE("createdAt" AT TIME ZONE 'UTC')
       ORDER BY day ASC
     `,
     // Per-client stats
@@ -63,10 +66,22 @@ export async function GET() {
     ? Math.round(((totalIssues - slaBreached) / totalIssues) * 100)
     : 100;
 
-  const volumeByDay = issuesByDay.map((r) => ({
-    day: String(r.day).slice(0, 10),
-    count: Number(r.count),
-  }));
+  // Build 60-day map with all days
+  const dayMap = new Map<string, number>();
+  issuesByDay.forEach((r) => {
+    dayMap.set(r.day, Number(r.count));
+  });
+
+  // Fill all 60 days
+  const volumeByDay = [];
+  for (let i = 59; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * 86400000);
+    const key = d.toISOString().slice(0, 10);
+    volumeByDay.push({
+      day: key.slice(5), // MM-DD format
+      count: dayMap.get(key) || 0,
+    });
+  }
 
   const customerHealth = clientsWithCounts.map((c) => ({
     id: c.id,

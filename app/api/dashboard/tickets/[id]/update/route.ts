@@ -5,6 +5,14 @@ import { prisma } from "@/lib/prisma";
 import { resolveTicketId } from "@/lib/resolve-ticket";
 import { createNotification, getStatusChangeRecipients } from "@/lib/notifications";
 import type { Server } from "socket.io";
+import type { IssuePriority } from "@prisma/client";
+
+const SLA_DEFAULTS: Record<IssuePriority, { responseTime: number; resolutionTime: number }> = {
+  CRITICAL: { responseTime: 1, resolutionTime: 4 },
+  HIGH: { responseTime: 4, resolutionTime: 24 },
+  MEDIUM: { responseTime: 8, resolutionTime: 72 },
+  LOW: { responseTime: 24, resolutionTime: 168 },
+};
 
 export async function PUT(
   request: NextRequest,
@@ -91,6 +99,21 @@ export async function PUT(
         return NextResponse.json({ error: "Invalid priority" }, { status: 400 });
       }
       updateData.priority = priority;
+
+      // If priority changed, recalculate SLA deadline
+      if (priority !== ticket.priority) {
+        const slaConfig = SLA_DEFAULTS[priority as IssuePriority];
+        const newSlaDueAt = new Date(
+          ticket.createdAt.getTime() + slaConfig.resolutionTime * 60 * 60 * 1000
+        );
+        updateData.slaDueAt = newSlaDueAt;
+
+        // Recalculate breach status
+        const now = new Date();
+        const twoHoursFromNow = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+        updateData.slaBreached = newSlaDueAt < now;
+        updateData.slaBreachRisk = newSlaDueAt < twoHoursFromNow && newSlaDueAt >= now;
+      }
     }
 
     // Update category if provided

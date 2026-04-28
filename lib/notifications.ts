@@ -44,6 +44,80 @@ export function extractMentions(text: string): string[] {
   return [...new Set(mentions)];
 }
 
+export async function getMentionableUsers(
+  currentUserId: string,
+  ticketId: string
+) {
+  try {
+    // Get current user and ticket info
+    const currentUser = await prisma.user.findUnique({
+      where: { id: currentUserId },
+    });
+
+    const ticket = await prisma.issue.findUnique({
+      where: { id: ticketId },
+      include: { client: true },
+    });
+
+    if (!currentUser || !ticket) {
+      console.log("[getMentionableUsers] User or ticket not found");
+      return [];
+    }
+
+    const is3SC = currentUser.role?.startsWith("THREESC_");
+    console.log(`[getMentionableUsers] is3SC: ${is3SC}, clientId: ${ticket.clientId}`);
+
+    // Get all 3SC users
+    const threescUsers = await prisma.user.findMany({
+      where: {
+        role: {
+          in: ["THREESC_ADMIN", "THREESC_LEAD", "THREESC_AGENT"],
+        },
+      },
+    });
+    console.log(`[getMentionableUsers] Found ${threescUsers.length} 3SC users`);
+
+    // Get all users from the ticket's client
+    const clientUsers = await prisma.user.findMany({
+      where: {
+        clientMembers: {
+          some: {
+            clientId: ticket.clientId,
+          },
+        },
+      },
+    });
+    console.log(`[getMentionableUsers] Found ${clientUsers.length} client users for clientId: ${ticket.clientId}`);
+
+    // Combine and deduplicate
+    const userMap = new Map();
+    [...clientUsers, ...threescUsers].forEach((user) => {
+      if (!userMap.has(user.id)) {
+        userMap.set(user.id, user);
+      }
+    });
+
+    return Array.from(userMap.values());
+  } catch (error) {
+    console.error("[getMentionableUsers] Error:", error);
+    return [];
+  }
+}
+
+export async function isUserMentionable(
+  mentionedUserId: string,
+  currentUserId: string,
+  ticketId: string
+): Promise<boolean> {
+  try {
+    const mentionable = await getMentionableUsers(currentUserId, ticketId);
+    return mentionable.some((u) => u.id === mentionedUserId);
+  } catch (error) {
+    console.error("[isUserMentionable] Error:", error);
+    return false;
+  }
+}
+
 export async function getStatusChangeRecipients(
   issueId: string,
   updatedById: string

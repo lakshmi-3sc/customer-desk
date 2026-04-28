@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Search, X } from "lucide-react";
+import { ProfileDropdown } from "./profile-dropdown";
+import { NotificationBell } from "./notification-bell";
 
 interface TopBarProps {
   /** Left side: breadcrumb / title content */
@@ -84,9 +86,11 @@ export function TopBar({ left, right }: TopBarProps) {
         </div>
       </form>
 
-      {/* Right: extra actions */}
-      <div className="flex items-center gap-2 flex-shrink-0">
-        {right ?? <div className="w-0" />}
+      {/* Right: extra actions + notifications + profile */}
+      <div className="flex items-center gap-1 flex-shrink-0">
+        {right}
+        <NotificationBell />
+        <ProfileDropdown />
       </div>
     </header>
   );

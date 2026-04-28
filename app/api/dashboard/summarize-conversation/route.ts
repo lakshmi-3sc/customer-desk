@@ -44,12 +44,20 @@ export async function POST(request: NextRequest) {
       messages: [
         {
           role: "user",
-          content: `Summarize this support ticket discussion thread concisely (4-6 sentences max). Include: issue, investigation steps, resolution, and outcome.
+          content: `Summarize this support ticket discussion thread in the following format:
+
+## Thread Summary
+
+**Issue:** [Brief description of what the problem was]
+
+**Resolution:** [What was done to fix it]
+
+**Status:** [Current status and any follow-up actions]
 
 Thread:
 ${conversation}
 
-Provide a clear, actionable summary:`,
+Format your response exactly as shown above with markdown headers and bold fields.`,
         },
       ],
     });

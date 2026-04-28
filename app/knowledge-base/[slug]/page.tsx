@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
-import { NotificationBell } from "@/components/notification-bell";
 
 const CATEGORY_META: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
   Billing: { icon: CreditCard, color: "text-emerald-600", bg: "bg-emerald-100 dark:bg-emerald-950" },
@@ -112,7 +111,6 @@ export default function KnowledgeBaseArticlePage() {
               )}
             </nav>
           }
-          right={<NotificationBell />}
         />
 
         <main className="flex-1 overflow-y-auto">

@@ -102,9 +102,9 @@ function TicketsContent() {
   const is3SCTeam = ['THREESC_ADMIN', 'THREESC_LEAD', 'THREESC_AGENT'].includes(session?.user?.role ?? '');
 
   const [filterAgent, setFilterAgent] = useState('');
-  const [filterCustomer, setFilterCustomer] = useState('');
+  const [filterClient, setFilterClient] = useState('');
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
-  const [customers, setCustomers] = useState<{ id: string; name: string }[]>([]);
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
   const [showBulkReassign, setShowBulkReassign] = useState(false);
   const [bulkAgent, setBulkAgent] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
@@ -120,24 +120,28 @@ function TicketsContent() {
     )) return false;
     if (filterPriority && t.priority !== filterPriority) return false;
     if (filterCategory && t.category !== filterCategory) return false;
+    if (filterClient && t.client?.id !== filterClient) return false;
     if (filterProject && t.project?.id !== filterProject) return false;
     if (filterDateFrom && new Date(t.createdAt) < new Date(filterDateFrom)) return false;
-    if (filterDateTo && new Date(t.createdAt) > new Date(filterDateTo + 'T23:59:59')) return false;
+    if (filterDateTo) {
+      const toDate = new Date(filterDateTo);
+      toDate.setHours(23, 59, 59, 999);
+      if (new Date(t.createdAt) > toDate) return false;
+    }
     if (filterAgent && t.assignedTo?.id !== filterAgent) return false;
-    if (filterCustomer && t.client?.id !== filterCustomer) return false;
     return true;
   });
 
-  const hasActiveFilters = !!(filterPriority || filterCategory || filterProject || filterDateFrom || filterDateTo || filterAgent || filterCustomer);
+  const hasActiveFilters = !!(filterPriority || filterCategory || filterClient || filterProject || filterDateFrom || filterDateTo || filterAgent);
 
   const clearFilters = () => {
     setFilterPriority('');
     setFilterCategory('');
+    setFilterClient('');
     setFilterProject('');
     setFilterDateFrom('');
     setFilterDateTo('');
     setFilterAgent('');
-    setFilterCustomer('');
   };
 
   const handleBulkReassign = async () => {
@@ -205,24 +209,27 @@ function TicketsContent() {
   };
 
   useEffect(() => {
-    fetch('/api/dashboard/projects')
+    fetch('/api/dashboard/projects', { cache: 'no-store' })
       .then((r) => r.ok ? r.json() : { projects: [] })
       .then((d) => setProjects(d.projects ?? []))
       .catch(() => {});
-  }, []);
+  }, [is3SCTeam]);
 
-  // Load agents + customers for Lead filters
+  // Load clients for 3SC team + agents for Lead filters
   useEffect(() => {
+    if (is3SCTeam) {
+      fetch('/api/admin/customers')
+        .then((r) => r.ok ? r.json() : { clients: [] })
+        .then((d) => setClients((d.clients ?? []).map((c: any) => ({ id: c.id, name: c.name }))))
+        .catch(() => {});
+    }
+
     if (!isLead) return;
     fetch('/api/dashboard/users')
       .then((r) => r.ok ? r.json() : [])
       .then((users: any[]) => setAgents(users.filter((u) => u.role === 'THREESC_AGENT')))
       .catch(() => {});
-    fetch('/api/admin/customers')
-      .then((r) => r.ok ? r.json() : { clients: [] })
-      .then((d) => setCustomers((d.clients ?? []).map((c: any) => ({ id: c.id, name: c.name }))))
-      .catch(() => {});
-  }, [isLead]);
+  }, [is3SCTeam, isLead]);
 
   useEffect(() => {
     setActiveTab(statusParam === 'ALL' ? 'ALL' : statusParam);
@@ -332,14 +339,14 @@ function TicketsContent() {
           {/* Tickets table */}
           <main className="flex-1 overflow-y-auto p-6">
 
-            {/* Filter bar */}
-            <div className="flex flex-wrap items-center gap-2 mb-4">
+            {/* Filter bar - single line */}
+            <div className="flex flex-nowrap items-center gap-1.5 mb-4 overflow-x-auto pb-2">
               <select
                 value={filterPriority}
                 onChange={(e) => setFilterPriority(e.target.value)}
-                className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC]"
+                className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC] truncate min-w-max"
               >
-                <option value="">All Priorities</option>
+                <option value="">Priorities</option>
                 <option value="CRITICAL">Critical</option>
                 <option value="HIGH">High</option>
                 <option value="MEDIUM">Medium</option>
@@ -349,9 +356,9 @@ function TicketsContent() {
               <select
                 value={filterCategory}
                 onChange={(e) => setFilterCategory(e.target.value)}
-                className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC]"
+                className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC] truncate min-w-max"
               >
-                <option value="">All Categories</option>
+                <option value="">Categories</option>
                 <option value="BUG">Bug</option>
                 <option value="FEATURE">Feature</option>
                 <option value="QUESTION">Question</option>
@@ -359,63 +366,69 @@ function TicketsContent() {
               </select>
 
               <select
-                value={filterProject}
-                onChange={(e) => setFilterProject(e.target.value)}
-                className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC]"
+                value={filterClient}
+                onChange={(e) => {
+                  setFilterClient(e.target.value);
+                  setFilterProject('');
+                }}
+                className={`text-xs border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC] min-w-max ${!is3SCTeam ? 'hidden' : ''}`}
+                style={{ maxWidth: '140px' }}
               >
-                <option value="">All Projects</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
+                <option value="">Clients</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name.length > 15 ? c.name.slice(0, 12) + '...' : c.name}</option>
                 ))}
               </select>
 
+              <select
+                value={filterProject}
+                onChange={(e) => setFilterProject(e.target.value)}
+                className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC] truncate min-w-max"
+              >
+                <option value="">Projects</option>
+                {projects
+                  .filter((p) => !filterClient || p.clientId === filterClient)
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>{p.name.length > 20 ? p.name.slice(0, 17) + '...' : p.name}</option>
+                  ))}
+              </select>
+
               {isLead && (
-                <>
-                  <select
-                    value={filterAgent}
-                    onChange={(e) => setFilterAgent(e.target.value)}
-                    className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC]">
-                    <option value="">All Agents</option>
-                    {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                  </select>
-                  <select
-                    value={filterCustomer}
-                    onChange={(e) => setFilterCustomer(e.target.value)}
-                    className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC]">
-                    <option value="">All Customers</option>
-                    {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </>
+                <select
+                  value={filterAgent}
+                  onChange={(e) => setFilterAgent(e.target.value)}
+                  className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC] truncate min-w-max"
+                >
+                  <option value="">Agents</option>
+                  {agents.map((a) => <option key={a.id} value={a.id}>{a.name.length > 15 ? a.name.slice(0, 12) + '...' : a.name}</option>)}
+                </select>
               )}
 
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-slate-500 dark:text-slate-400">From</span>
-                <input
-                  type="date"
-                  value={filterDateFrom}
-                  onChange={(e) => setFilterDateFrom(e.target.value)}
-                  className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC]"
-                />
-                <span className="text-xs text-slate-500 dark:text-slate-400">To</span>
-                <input
-                  type="date"
-                  value={filterDateTo}
-                  onChange={(e) => setFilterDateTo(e.target.value)}
-                  className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC]"
-                />
-              </div>
+              <input
+                type="date"
+                value={filterDateFrom}
+                onChange={(e) => setFilterDateFrom(e.target.value)}
+                className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-1.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC] min-w-max"
+              />
+              <span className="text-xs text-slate-400">-</span>
+              <input
+                type="date"
+                value={filterDateTo}
+                onChange={(e) => setFilterDateTo(e.target.value)}
+                className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-1.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC] min-w-max"
+              />
 
               {hasActiveFilters && (
                 <button
                   onClick={clearFilters}
-                  className="flex items-center gap-1 text-xs text-slate-500 hover:text-red-600 transition-colors"
+                  className="flex items-center gap-1 px-2 py-1.5 text-xs text-slate-500 hover:text-red-600 transition-colors whitespace-nowrap"
                 >
                   <X className="w-3 h-3" />
                   Clear
                 </button>
               )}
 
-              <div className="ml-auto flex items-center gap-2">
+              <div className="ml-auto flex items-center gap-1.5 flex-nowrap">
                 {selectedIds.size > 0 && (
                   <>
                     <span className="text-xs font-medium text-[#0052CC] dark:text-blue-400">
@@ -432,15 +445,15 @@ function TicketsContent() {
                 )}
                 <button
                   onClick={exportCSV}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                  title="Export CSV"
+                  className="flex items-center gap-1.5 px-2 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                 >
-                  <Download className="w-3 h-3" />
-                  Export CSV
+                  <Download className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+            <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
               {/* Table header */}
               <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
                 <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -503,6 +516,7 @@ function TicketsContent() {
                   )}
                 </div>
               ) : (
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 dark:border-slate-800">
@@ -516,7 +530,8 @@ function TicketsContent() {
                         />
                       </th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide w-28">Key</th>
-                      <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Summary</th>
+                      <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide flex-1">Summary</th>
+                      <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide w-48">Description</th>
                       <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide w-28">Priority</th>
                       <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide w-32">Status</th>
                       <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide w-28">Project</th>
@@ -555,10 +570,14 @@ function TicketsContent() {
                           <span className="text-slate-800 dark:text-slate-200 font-medium group-hover:text-[#0052CC] dark:group-hover:text-blue-400 transition-colors line-clamp-1">
                             {ticket.title}
                           </span>
-                          {ticket.description && (
-                            <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
+                        </td>
+                        <td className="px-3 py-3.5">
+                          {ticket.description ? (
+                            <span className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">
                               {ticket.description}
                             </span>
+                          ) : (
+                            <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
                           )}
                         </td>
                         <td className="px-3 py-3.5">
@@ -608,6 +627,7 @@ function TicketsContent() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
           </main>

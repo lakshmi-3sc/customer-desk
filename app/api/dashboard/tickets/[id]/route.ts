@@ -39,6 +39,23 @@ export async function GET(
             name: true,
           },
         },
+        attachments: true,
+        similarResolutionsFor: {
+          include: {
+            similarResolved: {
+              select: {
+                id: true,
+                ticketKey: true,
+                title: true,
+                status: true,
+                resolvedAt: true,
+              },
+            },
+          },
+          orderBy: {
+            similarityScore: "desc",
+          },
+        },
       },
     });
 

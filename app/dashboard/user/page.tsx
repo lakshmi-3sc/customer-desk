@@ -18,7 +18,6 @@ import { Button } from "@/components/ui/button";
 import { useSession } from "next-auth/react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
-import { NotificationBell } from "@/components/notification-bell";
 
 function StatusLozenge({ status }: { status: string }) {
   const map: Record<string, string> = {
@@ -98,16 +97,13 @@ export default function UserDashboard() {
             </div>
           }
           right={
-            <div className="flex items-center gap-2">
-              <NotificationBell />
-              <button
-                onClick={fetchIssues}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors"
-              >
-                <RefreshCw className="w-3 h-3" />
-                Refresh
-              </button>
-            </div>
+            <button
+              onClick={fetchIssues}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors"
+            >
+              <RefreshCw className="w-3 h-3" />
+              Refresh
+            </button>
           }
         />
 
