@@ -254,6 +254,13 @@ export function AppSidebar() {
         {isClientAdmin && (
           <>
             <NavItem
+              href="/knowledge-base"
+              icon={<BookOpen className="w-5 h-5" />}
+              label="Knowledge Base"
+              active={pathname.startsWith("/knowledge-base")}
+              collapsed={collapsed}
+            />
+            <NavItem
               href="/team"
               icon={<Users className="w-5 h-5" />}
               label="Team"
