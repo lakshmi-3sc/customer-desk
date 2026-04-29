@@ -211,6 +211,7 @@ model IssueHistory {
 
 model KnowledgeBase {
   id          String   @id @default(cuid())
+  slug        String?
   title       String
   content     String
   category    String?

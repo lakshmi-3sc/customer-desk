@@ -1,0 +1,12 @@
+
+> customer-desk@0.1.0 dev
+> tsx watch server.ts
+
+⨯ Another next dev server is already running.
+
+- Local:        http://localhost:3000
+- PID:          33980
+- Dir:          C:\Users\Guru Lakshmi\Repos\Customer_Portal\customer-desk
+- Log:          .next\dev\logs\next-development.log
+
+Run taskkill /PID 33980 /F to stop it.

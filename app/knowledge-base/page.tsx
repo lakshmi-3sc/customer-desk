@@ -6,23 +6,21 @@ import {
   Search,
   X,
   BookOpen,
-  CreditCard,
-  Plug,
-  Truck,
-  UserCog,
-  Wrench,
-  ArrowUpRight,
   ChevronRight,
+  Package,
+  GitBranch,
+  Factory,
+  Clock,
+  ArrowRight,
+  ArrowUpRight,
 } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
 
 const CATEGORIES = [
-  { key: "Billing", label: "Billing FAQ", icon: CreditCard, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800" },
-  { key: "Integration", label: "Integration Guides", icon: Plug, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800" },
-  { key: "Delivery", label: "Delivery Tracking", icon: Truck, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800" },
-  { key: "Account", label: "Account Setup", icon: UserCog, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800" },
-  { key: "Technical", label: "Technical Support", icon: Wrench, color: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800" },
+  { key: "Production", label: "Production Planning", icon: Factory, color: "text-cyan-600 dark:text-cyan-400", bg: "bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200 dark:border-cyan-800" },
+  { key: "RawMaterial", label: "Raw Material Planning", icon: Package, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-950/40 border-orange-200 dark:border-orange-800" },
+  { key: "Replenishment", label: "SaaS Replenishment", icon: GitBranch, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800" },
 ];
 
 export default function KnowledgeBasePage() {
@@ -192,37 +190,73 @@ export default function KnowledgeBasePage() {
 
 function PopularArticles({ router }: { router: ReturnType<typeof useRouter> }) {
   const [articles, setArticles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch("/api/knowledge-base")
       .then((r) => r.json())
-      .then((d) => setArticles((d.articles ?? []).slice(0, 6)))
-      .catch(() => {});
+      .then((d) => {
+        setArticles(d.articles ?? []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, []);
+
+  if (loading) {
+    return (
+      <div>
+        <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-4">Essential Planning Guides</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-32 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (articles.length === 0) return null;
 
   return (
     <div>
-      <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-4">Popular Articles</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="mb-6">
+        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-1">Essential Planning Guides</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Learn production planning, material management, and replenishment strategies</p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {articles.map((article) => {
           const cat = CATEGORIES.find((c) => c.key === article.category);
           const Icon = cat?.icon ?? BookOpen;
           return (
             <button
-              key={article.slug}
-              onClick={() => router.push(`/knowledge-base/${article.slug}`)}
-              className="flex items-start gap-3 p-4 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-[#0052CC] dark:hover:border-blue-500 hover:shadow-sm transition-all text-left group"
+              key={article.id}
+              onClick={() => router.push(`/knowledge-base/${article.slug || article.id}`)}
+              className="flex flex-col gap-3 p-5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-[#0052CC] dark:hover:border-blue-500 hover:shadow-lg transition-all text-left group"
             >
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${cat?.bg ?? "bg-slate-100"}`}>
-                <Icon className={`w-3.5 h-3.5 ${cat?.color ?? "text-slate-500"}`} />
+              {/* Icon & Category Header */}
+              <div className="flex items-start justify-between">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${cat?.bg ?? "bg-slate-100"}`}>
+                  <Icon className={`w-5 h-5 ${cat?.color ?? "text-slate-500"}`} />
+                </div>
+                <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 uppercase tracking-wide">
+                  {article.category}
+                </span>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 group-hover:text-[#0052CC] dark:group-hover:text-blue-400 transition-colors truncate">
+
+              {/* Title & Summary */}
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 group-hover:text-[#0052CC] dark:group-hover:text-blue-400 transition-colors leading-snug mb-1.5">
                   {article.title}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                  {article.summary || article.content?.substring(0, 80) + "..."}
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">{article.summary}</p>
+              </div>
+
+              {/* Read More Link */}
+              <div className="flex items-center gap-1 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs font-medium text-[#0052CC] dark:text-blue-400 group-hover:gap-2 transition-all">
+                <span>Read article</span>
+                <ArrowRight className="w-3 h-3" />
               </div>
             </button>
           );

@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
+import { InternalSummary } from "@/components/dashboard/InternalSummary";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 interface Stats {
@@ -63,6 +64,7 @@ export default function LeadDashboard() {
 
         <main className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* KPI Cards */}
+          {/* KPI Cards */}
           <div className="grid grid-cols-4 gap-4">
             {loading ? [...Array(4)].map((_, i) => (
               <div key={i} className="h-24 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 animate-pulse" />
@@ -77,6 +79,9 @@ export default function LeadDashboard() {
               </button>
             ))}
           </div>
+
+          {/* Operations Summary */}
+          <InternalSummary />
 
           <div className="grid grid-cols-3 gap-6">
             {/* Agent performance table */}
@@ -127,6 +132,7 @@ export default function LeadDashboard() {
 
             {/* Escalation + AI alerts */}
             <div className="space-y-4">
+
               {/* Escalation alerts */}
               <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4">
                 <div className="flex items-center justify-between mb-3">

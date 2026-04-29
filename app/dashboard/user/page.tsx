@@ -18,6 +18,9 @@ import { Button } from "@/components/ui/button";
 import { useSession } from "next-auth/react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
+import { WeeklySummary } from "@/components/dashboard/WeeklySummary";
+import { CustomerUserInsights } from "@/components/dashboard/CustomerUserInsights";
+import { CustomerAdminInsights } from "@/components/dashboard/CustomerAdminInsights";
 
 function StatusLozenge({ status }: { status: string }) {
   const map: Record<string, string> = {
@@ -52,6 +55,9 @@ export default function UserDashboard() {
   const [loading, setLoading] = useState(true);
 
   const firstName = session?.user?.name?.split(" ")[0] ?? "there";
+  const userRole = session?.user?.role as string | undefined;
+  const isClientUser = userRole === "CLIENT_USER";
+  const isClientAdmin = userRole === "CLIENT_ADMIN";
 
   const fetchIssues = async () => {
     setLoading(true);
@@ -180,8 +186,16 @@ export default function UserDashboard() {
               </div>
             </div>
 
-            {/* Recent Issues */}
-            <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+            {/* Insights + Recent Issues (Two Column) */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left Column - Insights */}
+              <div className="lg:col-span-1">
+                {isClientUser && <CustomerUserInsights />}
+                {isClientAdmin && <CustomerAdminInsights />}
+              </div>
+
+              {/* Right Column - Recent Issues */}
+              <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
               <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800">
                 <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">My Recent Issues</h2>
                 <Button
@@ -251,6 +265,7 @@ export default function UserDashboard() {
                   </table>
                 </div>
               )}
+              </div>
             </div>
 
             {/* AI Tip + Knowledge Base CTA */}
