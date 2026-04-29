@@ -9,6 +9,7 @@ import { ChevronRight, Paperclip, Loader2, X, AlertCircle, CheckCircle, Upload }
 import { useSession } from "next-auth/react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
+import { TicketSuggestions } from "@/components/TicketSuggestions";
 
 interface Attachment {
   id: string;
@@ -241,7 +242,7 @@ export default function CreateTicketPage() {
                 </h3>
 
                 {/* Title */}
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 relative">
                   <Label htmlFor="title" className="text-sm font-medium text-slate-700 dark:text-slate-300">
                     Summary <span className="text-red-500">*</span>
                   </Label>
@@ -252,6 +253,7 @@ export default function CreateTicketPage() {
                     onChange={(e) => setTitle(e.target.value)}
                     className="h-10 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus-visible:ring-[#0052CC]"
                   />
+                  <TicketSuggestions query={title} />
                 </div>
 
                 {/* Description */}
