@@ -2,10 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { ArrowLeft, BookOpen, Calendar, User } from "lucide-react";
+import { ArrowLeft, BookOpen, Calendar, User, Clock, Share2, Copy, Check } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
 import ReactMarkdown from "react-markdown";
+
+const getCategoryColor = (category: string) => {
+  const colors: Record<string, { bg: string; text: string; badge: string }> = {
+    Production: { bg: "from-cyan-50 to-blue-50 dark:from-cyan-950/20 dark:to-blue-950/20", text: "text-cyan-700 dark:text-cyan-400", badge: "bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-400" },
+    RawMaterial: { bg: "from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20", text: "text-orange-700 dark:text-orange-400", badge: "bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-400" },
+    Replenishment: { bg: "from-indigo-50 to-purple-50 dark:from-indigo-950/20 dark:to-purple-950/20", text: "text-indigo-700 dark:text-indigo-400", badge: "bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400" },
+  };
+  return colors[category] || colors.Production;
+};
+
+const estimateReadTime = (content: string) => Math.max(1, Math.ceil(content.split(" ").length / 200));
 
 export default function KBArticlePage() {
   const router = useRouter();
@@ -15,10 +26,10 @@ export default function KBArticlePage() {
   const [article, setArticle] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!slug) return;
-
     fetch(`/api/knowledge-base?slug=${slug}`)
       .then((r) => {
         if (!r.ok) throw new Error("Article not found");
@@ -34,16 +45,23 @@ export default function KBArticlePage() {
       });
   }, [slug]);
 
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(window.location.href);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   if (loading) {
     return (
-      <div className="h-screen w-screen flex overflow-hidden bg-[#F4F5F7] dark:bg-slate-950">
+      <div className="h-screen w-screen flex overflow-hidden bg-white dark:bg-slate-950">
         <AppSidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
           <TopBar left={<div className="h-6 w-32 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />} />
-          <main className="flex-1 overflow-y-auto p-6">
-            <div className="max-w-3xl mx-auto space-y-4">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-6 bg-slate-200 dark:bg-slate-700 rounded animate-pulse w-full" />
+          <main className="flex-1 overflow-y-auto">
+            <div className="h-40 bg-slate-200 dark:bg-slate-800 animate-pulse" />
+            <div className="max-w-4xl mx-auto px-8 py-8 space-y-6">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse w-full" />
               ))}
             </div>
           </main>
@@ -54,20 +72,22 @@ export default function KBArticlePage() {
 
   if (error || !article) {
     return (
-      <div className="h-screen w-screen flex overflow-hidden bg-[#F4F5F7] dark:bg-slate-950">
+      <div className="h-screen w-screen flex overflow-hidden bg-white dark:bg-slate-950">
         <AppSidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
           <TopBar left={<div>Knowledge Base</div>} />
-          <main className="flex-1 overflow-y-auto p-6">
-            <div className="max-w-3xl mx-auto text-center py-12">
-              <BookOpen className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
-              <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">Article Not Found</h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-                Sorry, we couldn't find the article you're looking for.
+          <main className="flex-1 overflow-y-auto p-8">
+            <div className="max-w-2xl mx-auto text-center py-16">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 mb-6">
+                <BookOpen className="w-8 h-8 text-slate-400 dark:text-slate-500" />
+              </div>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">Article Not Found</h1>
+              <p className="text-slate-600 dark:text-slate-400 mb-8">
+                The article you're looking for doesn't exist or has been removed.
               </p>
               <button
                 onClick={() => router.push("/knowledge-base")}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-[#0052CC] hover:bg-[#0747A6] text-white rounded-lg font-medium transition-colors"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-[#0052CC] hover:bg-[#0747A6] text-white rounded-lg font-semibold transition-all hover:shadow-lg"
               >
                 <ArrowLeft className="w-4 h-4" />
                 Back to Knowledge Base
@@ -79,82 +99,118 @@ export default function KBArticlePage() {
     );
   }
 
+  const categoryColors = getCategoryColor(article.category);
+  const readTime = estimateReadTime(article.content);
+
   return (
-    <div className="h-screen w-screen flex overflow-hidden bg-[#F4F5F7] dark:bg-slate-950">
+    <div className="h-screen w-screen flex overflow-hidden bg-white dark:bg-slate-950">
       <AppSidebar />
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar
           left={
-            <nav className="flex items-center gap-1.5 text-sm">
-              <button onClick={() => router.push("/knowledge-base")} className="text-[#0052CC] hover:underline">
+            <nav className="flex items-center gap-2 text-sm">
+              <button onClick={() => router.push("/knowledge-base")} className="text-[#0052CC] hover:text-[#0747A6] font-medium transition-colors">
                 Knowledge Base
               </button>
-              <span className="text-slate-400">/</span>
-              <span className="text-slate-600 dark:text-slate-400 font-semibold max-w-xs truncate">{article.title}</span>
+              <span className="text-slate-300">/</span>
+              <span className="text-slate-700 dark:text-slate-300 font-semibold truncate max-w-md">{article.title}</span>
             </nav>
           }
         />
 
         <main className="flex-1 overflow-y-auto">
-          <article className="max-w-3xl mx-auto px-6 py-8 space-y-6">
-            <div className="space-y-4">
-              <button
-                onClick={() => router.push("/knowledge-base")}
-                className="flex items-center gap-1.5 text-xs font-semibold text-[#0052CC] dark:text-blue-400 hover:underline mb-4"
-              >
-                <ArrowLeft className="w-3 h-3" />
-                Back
-              </button>
+          {/* Hero Header */}
+          <div className={`bg-gradient-to-r ${categoryColors.bg} border-b border-slate-200 dark:border-slate-800`}>
+            <div className="max-w-4xl mx-auto px-8 py-12">
+              <div className="mb-6 flex items-center gap-3">
+                <span className={`text-xs font-bold px-3 py-1.5 rounded-lg ${categoryColors.badge} uppercase tracking-wider`}>
+                  {article.category}
+                </span>
+                <span className={`text-xs font-medium flex items-center gap-1 ${categoryColors.text}`}>
+                  <Clock className="w-3.5 h-3.5" />
+                  {readTime} min read
+                </span>
+              </div>
+              <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100 mb-4 leading-tight">{article.title}</h1>
 
-              <div>
-                <div className="inline-flex items-center gap-2 mb-3">
-                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-blue-100 dark:bg-blue-950 text-[#0052CC] dark:text-blue-400 uppercase tracking-wide">
-                    {article.category}
-                  </span>
-                </div>
-                <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-2">{article.title}</h1>
-                <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 text-sm">
                   {article.createdBy && (
-                    <div className="flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5" />
-                      <span>{article.createdBy.name}</span>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-[#0052CC] flex items-center justify-center text-white font-semibold text-xs">
+                        {article.createdBy.name.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-medium text-slate-900 dark:text-slate-100">{article.createdBy.name}</p>
+                      </div>
                     </div>
                   )}
                   {article.createdAt && (
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5" />
-                      <span>{new Date(article.createdAt).toLocaleDateString()}</span>
+                    <div className="text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                      <Calendar className="w-4 h-4" />
+                      {new Date(article.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
                     </div>
                   )}
                 </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleCopyLink}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-slate-700 dark:text-slate-300 text-sm font-medium"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="w-4 h-4 text-green-600" />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4" />
+                        Copy Link
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
+          </div>
 
-            <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-6 prose dark:prose-invert prose-sm max-w-none">
+          {/* Content */}
+          <article className="max-w-4xl mx-auto px-8 py-12">
+            <div className="prose dark:prose-invert prose-lg max-w-none">
               <ReactMarkdown
                 components={{
-                  h2: ({ children }) => <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mt-6 mb-3 first:mt-0">{children}</h2>,
-                  h3: ({ children }) => <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mt-4 mb-2">{children}</h3>,
-                  p: ({ children }) => <p className="text-slate-700 dark:text-slate-300 mb-3 leading-relaxed">{children}</p>,
-                  ul: ({ children }) => <ul className="list-disc list-inside space-y-2 mb-3 text-slate-700 dark:text-slate-300">{children}</ul>,
-                  li: ({ children }) => <li className="ml-2">{children}</li>,
-                  code: ({ children }) => <code className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-sm font-mono">{children}</code>,
-                  pre: ({ children }) => <pre className="bg-slate-950 text-slate-50 p-4 rounded-lg overflow-x-auto mb-3 text-sm">{children}</pre>,
+                  h2: ({ children }) => <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-8 mb-4 pt-6 border-t border-slate-200 dark:border-slate-800 first:mt-0 first:pt-0 first:border-0">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mt-6 mb-3">{children}</h3>,
+                  p: ({ children }) => <p className="text-slate-700 dark:text-slate-300 mb-4 leading-relaxed text-base">{children}</p>,
+                  ul: ({ children }) => <ul className="space-y-2 mb-4 ml-4">{children}</ul>,
+                  li: ({ children }) => <li className="text-slate-700 dark:text-slate-300 flex gap-3 before:content-['•'] before:text-[#0052CC] before:font-bold before:mr-1">{children}</li>,
+                  blockquote: ({ children }) => <blockquote className="border-l-4 border-[#0052CC] bg-blue-50 dark:bg-blue-950/20 pl-4 py-3 my-4 italic text-slate-700 dark:text-slate-300">{children}</blockquote>,
+                  code: ({ children }) => <code className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-sm font-mono text-red-600 dark:text-red-400">{children}</code>,
+                  pre: ({ children }) => <pre className="bg-slate-950 text-slate-50 p-6 rounded-lg overflow-x-auto mb-4 text-sm font-mono border border-slate-800">{children}</pre>,
+                  table: ({ children }) => <div className="overflow-x-auto mb-4"><table className="w-full border-collapse">{children}</table></div>,
+                  th: ({ children }) => <th className="bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold p-3 text-left border border-slate-200 dark:border-slate-700">{children}</th>,
+                  td: ({ children }) => <td className="p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">{children}</td>,
                 }}
               >
                 {article.content}
               </ReactMarkdown>
             </div>
 
-            <div className="pt-6 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-              <div>Last updated {new Date(article.updatedAt || article.createdAt).toLocaleDateString()}</div>
-              <button
-                onClick={() => router.push("/knowledge-base")}
-                className="text-[#0052CC] dark:text-blue-400 hover:underline font-semibold"
-              >
-                View all articles
-              </button>
+            {/* Footer */}
+            <div className="mt-12 pt-8 border-t border-slate-200 dark:border-slate-800">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
+                <div className="text-sm text-slate-600 dark:text-slate-400">
+                  Last updated <time>{new Date(article.updatedAt || article.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</time>
+                </div>
+                <button
+                  onClick={() => router.push("/knowledge-base")}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#0052CC] hover:bg-[#0747A6] text-white rounded-lg font-semibold transition-all hover:shadow-lg"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Back to Articles
+                </button>
+              </div>
             </div>
           </article>
         </main>
