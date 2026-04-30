@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { ArrowLeft, BookOpen, Calendar, User, Clock, Share2, Copy, Check } from "lucide-react";
+import { ArrowLeft, BookOpen, Calendar, User, Clock, Share2, Copy, Check, ThumbsUp, ThumbsDown } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
 import ReactMarkdown from "react-markdown";
@@ -27,6 +27,8 @@ export default function KBArticlePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [helpful, setHelpful] = useState<"up" | "down" | null>(null);
+  const [feedbackSent, setFeedbackSent] = useState(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -49,6 +51,22 @@ export default function KBArticlePage() {
     navigator.clipboard.writeText(window.location.href);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleHelpful = async (value: "up" | "down") => {
+    setHelpful(value);
+    setFeedbackSent(true);
+    setTimeout(() => setFeedbackSent(false), 2000);
+
+    try {
+      await fetch(`/api/knowledge-base/${slug}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ helpful: value }),
+      });
+    } catch (err) {
+      console.error("Failed to submit feedback:", err);
+    }
   };
 
   if (loading) {
@@ -110,6 +128,14 @@ export default function KBArticlePage() {
         <TopBar
           left={
             <nav className="flex items-center gap-2 text-sm">
+              {typeof window !== "undefined" && window.history.length > 1 && (
+                <>
+                  <button onClick={() => router.back()} className="text-[#0052CC] hover:text-[#0747A6] font-medium transition-colors">
+                    ← Back
+                  </button>
+                  <span className="text-slate-300">/</span>
+                </>
+              )}
               <button onClick={() => router.push("/knowledge-base")} className="text-[#0052CC] hover:text-[#0747A6] font-medium transition-colors">
                 Knowledge Base
               </button>
@@ -177,14 +203,14 @@ export default function KBArticlePage() {
 
           {/* Content */}
           <article className="max-w-4xl mx-auto px-8 py-12">
-            <div className="prose dark:prose-invert prose-lg max-w-none">
+            <div className="prose dark:prose-invert max-w-none">
               <ReactMarkdown
                 components={{
-                  h2: ({ children }) => <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-8 mb-4 pt-6 border-t border-slate-200 dark:border-slate-800 first:mt-0 first:pt-0 first:border-0">{children}</h2>,
-                  h3: ({ children }) => <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mt-6 mb-3">{children}</h3>,
-                  p: ({ children }) => <p className="text-slate-700 dark:text-slate-300 mb-4 leading-relaxed text-base">{children}</p>,
-                  ul: ({ children }) => <ul className="space-y-2 mb-4 ml-4">{children}</ul>,
-                  li: ({ children }) => <li className="text-slate-700 dark:text-slate-300 flex gap-3 before:content-['•'] before:text-[#0052CC] before:font-bold before:mr-1">{children}</li>,
+                  h2: ({ children }) => <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 mt-6 mb-3 pt-4 border-t border-slate-200 dark:border-slate-800 first:mt-0 first:pt-0 first:border-0">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 mt-5 mb-2.5">{children}</h3>,
+                  p: ({ children }) => <p className="text-slate-700 dark:text-slate-300 mb-3 leading-relaxed text-sm">{children}</p>,
+                  ul: ({ children }) => <ul className="space-y-1.5 mb-3 ml-4">{children}</ul>,
+                  li: ({ children }) => <li className="text-slate-700 dark:text-slate-300 flex gap-3 before:content-['•'] before:text-[#0052CC] before:font-bold before:mr-1 text-sm">{children}</li>,
                   blockquote: ({ children }) => <blockquote className="border-l-4 border-[#0052CC] bg-blue-50 dark:bg-blue-950/20 pl-4 py-3 my-4 italic text-slate-700 dark:text-slate-300">{children}</blockquote>,
                   code: ({ children }) => <code className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-sm font-mono text-red-600 dark:text-red-400">{children}</code>,
                   pre: ({ children }) => <pre className="bg-slate-950 text-slate-50 p-6 rounded-lg overflow-x-auto mb-4 text-sm font-mono border border-slate-800">{children}</pre>,
@@ -199,17 +225,52 @@ export default function KBArticlePage() {
 
             {/* Footer */}
             <div className="mt-12 pt-8 border-t border-slate-200 dark:border-slate-800">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
-                <div className="text-sm text-slate-600 dark:text-slate-400">
-                  Last updated <time>{new Date(article.updatedAt || article.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</time>
+              <div className="flex flex-col gap-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
+                  <div className="text-sm text-slate-600 dark:text-slate-400">
+                    Last updated <time>{new Date(article.updatedAt || article.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</time>
+                  </div>
+                  <button
+                    onClick={() => router.push("/knowledge-base")}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#0052CC] hover:bg-[#0747A6] text-white rounded-lg font-semibold transition-all hover:shadow-lg"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    Back to Articles
+                  </button>
                 </div>
-                <button
-                  onClick={() => router.push("/knowledge-base")}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#0052CC] hover:bg-[#0747A6] text-white rounded-lg font-semibold transition-all hover:shadow-lg"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  Back to Articles
-                </button>
+
+                <div className="flex items-center gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Was this helpful?</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleHelpful("up")}
+                      disabled={feedbackSent}
+                      className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg transition-all ${
+                        helpful === "up"
+                          ? "bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-400"
+                          : "border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                      } ${feedbackSent ? "opacity-50 cursor-not-allowed" : ""}`}
+                    >
+                      <ThumbsUp className="w-4 h-4" />
+                      <span className="text-xs font-medium">Yes</span>
+                    </button>
+                    <button
+                      onClick={() => handleHelpful("down")}
+                      disabled={feedbackSent}
+                      className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg transition-all ${
+                        helpful === "down"
+                          ? "bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-400"
+                          : "border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                      } ${feedbackSent ? "opacity-50 cursor-not-allowed" : ""}`}
+                    >
+                      <ThumbsDown className="w-4 h-4" />
+                      <span className="text-xs font-medium">No</span>
+                    </button>
+                  </div>
+                  {feedbackSent && (
+                    <span className="text-xs text-green-600 dark:text-green-400 font-medium">✓ Thank you for your feedback</span>
+                  )}
+                </div>
               </div>
             </div>
           </article>

@@ -64,11 +64,16 @@ Format your response exactly as shown above with markdown headers and bold field
 
     const summary = message.content[0].type === "text" ? message.content[0].text.trim() : "";
 
-    // Save summary to DB
-    await prisma.issue.update({
-      where: { id: ticketId },
-      data: { conversationSummary: summary }
-    });
+    // Save summary to DB with proper error handling
+    try {
+      await prisma.issue.update({
+        where: { id: ticketId },
+        data: { conversationSummary: summary }
+      });
+    } catch (dbError) {
+      console.error("[summarize-conversation-save-error]", dbError);
+      // Still return the summary even if save fails
+    }
 
     return NextResponse.json({ summary, cached: false });
   } catch (error) {

@@ -952,40 +952,54 @@ export default function TicketDetailPage() {
                   {/* Conversation tab */}
                   {detailTab === 'conversation' && (
                     <div className="p-6 space-y-4">
-                      {/* Summarize Button */}
+                      {/* Summarize Button - Positioned on right */}
                       {comments.filter((c) => !c.isInternal).length > 0 && (
-                        <button
-                          onClick={loadConversationSummary}
-                          disabled={summaryLoading || conversationSummary !== null}
-                          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/30 hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
+                        <div className="flex justify-end">
+                          <button
+                            onClick={loadConversationSummary}
+                            disabled={summaryLoading || conversationSummary !== null}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
                           {summaryLoading ? (
                             <>
-                              <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
-                              <span className="text-xs font-medium text-purple-700 dark:text-purple-400">Generating summary...</span>
+                              <Loader2 className="w-4 h-4 animate-spin text-purple-600 dark:text-purple-400" />
+                              <span className="text-sm font-medium text-purple-700 dark:text-purple-400">Generating summary...</span>
                             </>
                           ) : conversationSummary ? (
                             <>
-                              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                              <span className="text-xs font-medium text-emerald-600">Summary generated</span>
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                              <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Summary generated</span>
                             </>
                           ) : (
                             <>
-                              <Bot className="w-4 h-4 text-purple-600" />
-                              <span className="text-xs font-medium text-purple-700 dark:text-purple-400">Summarize with AI</span>
+                              <Bot className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                              <span className="text-sm font-medium text-purple-700 dark:text-purple-400">Summarize with AI</span>
                             </>
                           )}
-                        </button>
+                          </button>
+                        </div>
                       )}
 
                       {/* Summary Display */}
                       {conversationSummary && (
-                        <div className="p-4 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-200 dark:border-purple-800">
-                          <p className="text-xs font-semibold text-purple-700 dark:text-purple-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                            <Lightbulb className="w-3.5 h-3.5" />
-                            AI Summary
-                          </p>
-                          <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{conversationSummary}</p>
+                        <div className="p-5 bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-950/30 dark:to-blue-950/20 rounded-lg border border-purple-200 dark:border-purple-800 shadow-sm">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2 bg-purple-100 dark:bg-purple-900/40 rounded-lg flex-shrink-0">
+                              <Lightbulb className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-purple-700 dark:text-purple-300 uppercase tracking-wide mb-3">
+                                AI Summary
+                              </p>
+                              <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap break-words">
+                                {conversationSummary
+                                  .replace(/\*\*/g, '')
+                                  .replace(/\*/g, '')
+                                  .replace(/#+\s/g, '')
+                                  .trim()}
+                              </p>
+                            </div>
+                          </div>
                         </div>
                       )}
 

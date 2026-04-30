@@ -10,6 +10,7 @@ import { useSession } from "next-auth/react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
 import { TicketSuggestions } from "@/components/TicketSuggestions";
+import { SuggestionDrawer } from "@/components/SuggestionDrawer";
 
 interface Attachment {
   id: string;
@@ -43,6 +44,16 @@ export default function CreateTicketPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isDragging, setIsDragging] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [allSuggestions, setAllSuggestions] = useState<any[]>([]);
+
+  // Clear error whenever suggestions appear
+  useEffect(() => {
+    if (allSuggestions.length > 0) {
+      setError("");
+    }
+  }, [allSuggestions]);
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -57,6 +68,9 @@ export default function CreateTicketPage() {
       }
     };
     fetchProjects();
+    // Clear any previous errors and success messages on page load
+    setError("");
+    setSuccess("");
   }, []);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -187,8 +201,8 @@ export default function CreateTicketPage() {
         />
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-3xl mx-auto">
+        <main className="flex-1 overflow-hidden">
+          <div className="max-w-3xl mx-auto overflow-y-auto h-full p-6">
             <div className="mb-6">
               <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">
                 Create Issue
@@ -198,10 +212,18 @@ export default function CreateTicketPage() {
               </p>
             </div>
 
-            {error && (
-              <div className="flex items-start gap-3 p-3 mb-5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-lg">
+            {error && allSuggestions.length === 0 && !drawerOpen && (
+              <div className="flex items-start gap-3 p-4 mb-5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-lg">
                 <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+                <div className="flex-1">
+                  <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+                </div>
+                <button
+                  onClick={() => setError("")}
+                  className="flex-shrink-0 text-red-400 hover:text-red-600 dark:hover:text-red-300"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
             )}
 
@@ -242,7 +264,7 @@ export default function CreateTicketPage() {
                 </h3>
 
                 {/* Title */}
-                <div className="space-y-1.5 relative">
+                <div className="space-y-1.5">
                   <Label htmlFor="title" className="text-sm font-medium text-slate-700 dark:text-slate-300">
                     Summary <span className="text-red-500">*</span>
                   </Label>
@@ -250,10 +272,12 @@ export default function CreateTicketPage() {
                     id="title"
                     placeholder="Brief summary of the issue"
                     value={title}
-                    onChange={(e) => setTitle(e.target.value)}
+                    onChange={(e) => {
+                      setTitle(e.target.value);
+                      if (error) setError("");
+                    }}
                     className="h-10 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus-visible:ring-[#0052CC]"
                   />
-                  <TicketSuggestions query={title} />
                 </div>
 
                 {/* Description */}
@@ -261,14 +285,27 @@ export default function CreateTicketPage() {
                   <Label htmlFor="description" className="text-sm font-medium text-slate-700 dark:text-slate-300">
                     Description <span className="text-red-500">*</span>
                   </Label>
-                  <textarea
-                    id="description"
-                    placeholder="Describe the issue in detail — steps to reproduce, expected vs actual behaviour..."
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    rows={6}
-                    className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0052CC] focus:border-transparent resize-none"
-                  />
+                  <div className="relative">
+                    <textarea
+                      id="description"
+                      placeholder="Describe the issue in detail — steps to reproduce, expected vs actual behaviour..."
+                      value={description}
+                      onChange={(e) => {
+                        setDescription(e.target.value);
+                        if (error) setError("");
+                      }}
+                      rows={6}
+                      className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0052CC] focus:border-transparent resize-none"
+                    />
+                    <TicketSuggestions
+                      query={description}
+                      onItemClick={(item, type) => {
+                        setSelectedItem({ ...item, type });
+                        setDrawerOpen(true);
+                      }}
+                      onSuggestionsChange={setAllSuggestions}
+                    />
+                  </div>
                 </div>
 
                 {/* Priority + Category row */}
@@ -386,6 +423,15 @@ export default function CreateTicketPage() {
             </div>
           </div>
         </main>
+
+        {/* Suggestion Drawer */}
+        <SuggestionDrawer
+          isOpen={drawerOpen}
+          item={selectedItem}
+          items={allSuggestions}
+          onClose={() => setDrawerOpen(false)}
+          onSelectItem={(item) => setSelectedItem(item)}
+        />
       </div>
     </div>
   );

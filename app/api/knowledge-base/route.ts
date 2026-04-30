@@ -55,8 +55,11 @@ export async function GET(request: NextRequest) {
       include: { createdBy: { select: { name: true } } },
     });
 
-    // Return articles with content removed from list view
-    const list = articles.map(({ content: _, ...a }) => a);
+    // Return articles with preview summary instead of full content
+    const list = articles.map(({ content, ...a }) => ({
+      ...a,
+      summary: content.substring(0, 120).replace(/\n/g, " ").trim() + (content.length > 120 ? "..." : ""),
+    }));
 
     return NextResponse.json({ articles: list });
   } catch (error) {

@@ -28,6 +28,7 @@ model User {
   notifications   Notification[]
   ledProjects     Project[]       @relation("AssignedLead")
   createdProjects Project[]       @relation("CreatedBy")
+  kbFeedback      KnowledgeBaseFeedback[] @relation("KBFeedback")
 }
 
 model Client {
@@ -125,6 +126,7 @@ model Issue {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   ticketKey        String?           @unique
+  searchVector     String?           @db.Text
   comments         Comment[]
   assignedTo       User?             @relation("AssignedTo", fields: [assignedToId], references: [id])
   client           Client            @relation(fields: [clientId], references: [id])
@@ -221,8 +223,25 @@ model KnowledgeBase {
   isInternal  Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  searchVector String?  @db.Text
   client      Client?  @relation(fields: [clientId], references: [id])
   createdBy   User     @relation(fields: [createdById], references: [id])
+  feedback    KnowledgeBaseFeedback[]
+}
+
+model KnowledgeBaseFeedback {
+  id        String   @id @default(cuid())
+  articleId String
+  userId    String
+  helpful   String   // "up" or "down"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  article   KnowledgeBase @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  user      User     @relation("KBFeedback", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([articleId, userId])
+  @@index([articleId])
+  @@index([userId])
 }
 
 model Summary {

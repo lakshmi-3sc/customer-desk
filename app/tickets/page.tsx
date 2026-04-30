@@ -108,11 +108,31 @@ function TicketsContent() {
   const [showBulkReassign, setShowBulkReassign] = useState(false);
   const [bulkAgent, setBulkAgent] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [filterUnassigned, setFilterUnassigned] = useState(false);
+  const [filterSlaAtRisk, setFilterSlaAtRisk] = useState(false);
+  const [filterSlaBreached, setFilterSlaBreached] = useState(false);
 
   const statusParam = searchParams.get('status') || 'ALL';
   const searchQuery = searchParams.get('search') || '';
+  
+  // Parse alert query parameters and apply filters
+  useEffect(() => {
+    const priority = searchParams.get('priority');
+    const unassigned = searchParams.get('unassigned');
+    const slaAtRisk = searchParams.get('slaAtRisk');
+    const slaBreached = searchParams.get('slaBreached');
+    
+    if (priority) setFilterPriority(priority);
+    if (unassigned === 'true') setFilterUnassigned(true);
+    if (slaAtRisk === 'true') setFilterSlaAtRisk(true);
+    if (slaBreached === 'true') setFilterSlaBreached(true);
+  }, [searchParams]);
 
   const filteredTickets = tickets.filter((t) => {
+    // When alert filters are active, only show active tickets (not resolved/closed)
+    const hasAlertFilter = !!(filterPriority || filterUnassigned || filterSlaAtRisk || filterSlaBreached);
+    if (hasAlertFilter && ['RESOLVED', 'CLOSED'].includes(t.status)) return false;
+    
     if (searchQuery && !(
       t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (t.ticketKey ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -129,10 +149,13 @@ function TicketsContent() {
       if (new Date(t.createdAt) > toDate) return false;
     }
     if (filterAgent && t.assignedTo?.id !== filterAgent) return false;
+    if (filterUnassigned && t.assignedTo?.id) return false;
+    if (filterSlaAtRisk && !t.slaBreachRisk) return false;
+    if (filterSlaBreached && !t.slaBreached) return false;
     return true;
   });
 
-  const hasActiveFilters = !!(filterPriority || filterCategory || filterClient || filterProject || filterDateFrom || filterDateTo || filterAgent);
+  const hasActiveFilters = !!(filterPriority || filterCategory || filterClient || filterProject || filterDateFrom || filterDateTo || filterAgent || filterUnassigned || filterSlaAtRisk || filterSlaBreached);
 
   const clearFilters = () => {
     setFilterPriority('');
@@ -142,6 +165,9 @@ function TicketsContent() {
     setFilterDateFrom('');
     setFilterDateTo('');
     setFilterAgent('');
+    setFilterUnassigned(false);
+    setFilterSlaAtRisk(false);
+    setFilterSlaBreached(false);
   };
 
   const handleBulkReassign = async () => {
@@ -339,8 +365,8 @@ function TicketsContent() {
           {/* Tickets table */}
           <main className="flex-1 overflow-y-auto p-6">
 
-            {/* Filter bar - single line */}
-            <div className="flex flex-nowrap items-center gap-1.5 mb-4 overflow-x-auto pb-2">
+            {/* Filter bar - wraps on multiple lines */}
+            <div className="flex flex-wrap items-center gap-1.5 mb-4 pb-2">
               <select
                 value={filterPriority}
                 onChange={(e) => setFilterPriority(e.target.value)}
@@ -454,6 +480,19 @@ function TicketsContent() {
             </div>
 
             <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
+              {/* Active alert filter indicator */}
+              {(filterPriority || filterUnassigned || filterSlaAtRisk || filterSlaBreached) && (
+                <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-800 bg-blue-50 dark:bg-blue-950/20">
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    Active filter: 
+                    {filterPriority && ` Priority: ${filterPriority}`}
+                    {filterUnassigned && ` Unassigned Issues`}
+                    {filterSlaAtRisk && ` SLA At-Risk`}
+                    {filterSlaBreached && ` SLA Breached`}
+                  </p>
+                </div>
+              )}
+              
               {/* Table header */}
               <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
                 <p className="text-xs text-slate-500 dark:text-slate-400">
