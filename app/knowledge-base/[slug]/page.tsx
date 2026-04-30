@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { ArrowLeft, BookOpen, Calendar, User, Clock, Share2, Copy, Check, ThumbsUp, ThumbsDown } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { ArrowLeft, BookOpen, Calendar, User, Clock, Share2, Copy, Check, ThumbsUp, ThumbsDown, Edit2, X } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
 import ReactMarkdown from "react-markdown";
@@ -21,6 +22,7 @@ const estimateReadTime = (content: string) => Math.max(1, Math.ceil(content.spli
 export default function KBArticlePage() {
   const router = useRouter();
   const params = useParams();
+  const { data: session } = useSession();
   const slug = params.slug as string;
 
   const [article, setArticle] = useState<any>(null);
@@ -29,6 +31,13 @@ export default function KBArticlePage() {
   const [copied, setCopied] = useState(false);
   const [helpful, setHelpful] = useState<"up" | "down" | null>(null);
   const [feedbackSent, setFeedbackSent] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+  const [saving, setSaving] = useState(false);
+  
+  const isAdmin = session?.user?.role === 'THREESC_ADMIN';
 
   useEffect(() => {
     if (!slug) return;
@@ -39,6 +48,9 @@ export default function KBArticlePage() {
       })
       .then((d) => {
         setArticle(d.article);
+        setEditTitle(d.article.title);
+        setEditContent(d.article.content);
+        setEditCategory(d.article.category);
         setLoading(false);
       })
       .catch((e) => {
@@ -66,6 +78,32 @@ export default function KBArticlePage() {
       });
     } catch (err) {
       console.error("Failed to submit feedback:", err);
+    }
+  };
+
+  const handleSaveArticle = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/knowledge-base/${slug}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: editTitle,
+          content: editContent,
+          category: editCategory,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to save article");
+
+      const data = await res.json();
+      setArticle(data.article);
+      setEditMode(false);
+    } catch (err) {
+      console.error("Failed to save article:", err);
+      alert("Failed to save article");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -196,6 +234,15 @@ export default function KBArticlePage() {
                       </>
                     )}
                   </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => setEditMode(true)}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#0052CC] hover:bg-[#0747A6] text-white text-sm font-medium transition-colors"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                      Edit
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -275,6 +322,79 @@ export default function KBArticlePage() {
             </div>
           </article>
         </main>
+
+        {/* Edit Modal */}
+        {editMode && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+              <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-800">
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Edit Article</h2>
+                <button
+                  onClick={() => setEditMode(false)}
+                  className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Title
+                  </label>
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#0052CC]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Category
+                  </label>
+                  <select
+                    value={editCategory}
+                    onChange={(e) => setEditCategory(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#0052CC]"
+                  >
+                    <option value="Production">Production</option>
+                    <option value="RawMaterial">Raw Material</option>
+                    <option value="Replenishment">Replenishment</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Content (Markdown)
+                  </label>
+                  <textarea
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#0052CC] font-mono text-sm h-48"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3 justify-end">
+                  <button
+                    onClick={() => setEditMode(false)}
+                    className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveArticle}
+                    disabled={saving}
+                    className="px-6 py-2 rounded-lg bg-[#0052CC] hover:bg-[#0747A6] text-white font-medium transition-colors disabled:opacity-50"
+                  >
+                    {saving ? "Saving..." : "Save Changes"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

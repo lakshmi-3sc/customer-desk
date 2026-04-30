@@ -1,261 +1,457 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
-  ChevronRight, BookOpen, Plus, Search, Edit2, Trash2, Eye,
-  Tag, RefreshCw, X, CheckCircle, ArrowUpRight,
+  Search,
+  X,
+  BookOpen,
+  ChevronRight,
+  Package,
+  GitBranch,
+  Factory,
+  Clock,
+  ArrowRight,
+  ArrowUpRight,
+  Plus,
+  Edit2,
+  Trash2,
+  Eye,
+  Loader2,
 } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
-interface Article {
-  slug: string; title: string; category: string; summary: string;
-  tags: string[]; views?: number; helpful?: number; updatedAt?: string;
-}
+const CATEGORIES = [
+  { key: "Production", label: "Production Planning", icon: Factory, color: "text-cyan-600 dark:text-cyan-400", bg: "bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200 dark:border-cyan-800" },
+  { key: "RawMaterial", label: "Raw Material Planning", icon: Package, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-950/40 border-orange-200 dark:border-orange-800" },
+  { key: "Replenishment", label: "SaaS Replenishment", icon: GitBranch, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800" },
+  { key: "Troubleshooting", label: "Troubleshooting", icon: Factory, color: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800" },
+  { key: "BestPractices", label: "Best Practices", icon: BookOpen, color: "text-green-600 dark:text-green-400", bg: "bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-800" },
+];
 
-const CATEGORIES = ['All', 'Billing', 'Integration', 'Delivery', 'Account', 'Technical'];
-
-const CAT_COLORS: Record<string, string> = {
-  Billing: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-  Integration: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
-  Delivery: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
-  Account: 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300',
-  Technical: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300',
-};
-
-export default function KBManagementPage() {
+export default function AdminKBPage() {
   const router = useRouter();
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [filterCat, setFilterCat] = useState('All');
-  const [showCreate, setShowCreate] = useState(false);
-  const [reindexing, setReindexing] = useState(false);
-  const [reindexDone, setReindexDone] = useState(false);
-  const [deleteSlug, setDeleteSlug] = useState<string | null>(null);
-  const [form, setForm] = useState({ title: '', category: 'Technical', summary: '', tags: '', content: '' });
+  const { data: session } = useSession();
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("");
+  const [articles, setArticles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [showNewModal, setShowNewModal] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newCategory, setNewCategory] = useState("");
+  const [newContent, setNewContent] = useState("");
   const [saving, setSaving] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchArticles = async (q = '', cat = '') => {
+  // Check authorization
+  useEffect(() => {
+    if (session && !["THREESC_ADMIN", "THREESC_LEAD", "THREESC_AGENT"].includes(session.user?.role)) {
+      router.replace("/dashboard");
+    }
+  }, [session, router]);
+
+  const is3SCAdmin = session?.user?.role === "THREESC_ADMIN";
+
+  const fetchArticles = async (q: string, cat: string) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (q) params.set('q', q);
-      if (cat && cat !== 'All') params.set('category', cat);
+      if (q) params.set("q", q);
+      if (cat) params.set("category", cat);
       const res = await fetch(`/api/knowledge-base?${params.toString()}`);
-      if (res.ok) setArticles((await res.json()).articles ?? []);
-    } catch {} finally { setLoading(false); }
+      if (res.ok) {
+        const data = await res.json();
+        setArticles(data.articles ?? []);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { fetchArticles(search, filterCat); }, []);
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      fetchArticles(query, category);
+    }, 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [query, category]);
 
-  const handleSearch = () => fetchArticles(search, filterCat);
-
-  const reindex = () => {
-    setReindexing(true);
-    setTimeout(() => { setReindexing(false); setReindexDone(true); setTimeout(() => setReindexDone(false), 3000); }, 2500);
-  };
-
-  const filtered = articles.filter((a) => {
-    const matchQ = !search || a.title.toLowerCase().includes(search.toLowerCase()) || a.summary.toLowerCase().includes(search.toLowerCase());
-    const matchCat = filterCat === 'All' || a.category === filterCat;
-    return matchQ && matchCat;
-  });
+  const showArticleList = query.length > 0 || category.length > 0;
 
   return (
     <div className="h-screen w-screen flex overflow-hidden bg-[#F4F5F7] dark:bg-slate-950">
       <AppSidebar />
+
       <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar
           left={
-            <div className="flex items-center gap-2 text-sm">
-              <button onClick={() => router.push('/admin')} className="text-[#0052CC] dark:text-blue-400 hover:underline font-medium">Admin</button>
-              <ChevronRight className="w-4 h-4 text-slate-400" />
-              <span className="text-slate-700 dark:text-slate-300 font-medium">Knowledge Base Management</span>
-            </div>
-          }
-          right={
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={reindex} disabled={reindexing} className="h-8 text-xs">
-                <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${reindexing ? 'animate-spin' : ''}`} />
-                {reindexing ? 'Indexing...' : reindexDone ? '✓ Indexed' : 'Re-index AI'}
-              </Button>
-              <Button onClick={() => setShowCreate(true)} className="h-8 text-xs bg-[#0052CC] hover:bg-[#0747A6] text-white px-3">
-                <Plus className="w-3.5 h-3.5 mr-1.5" />New Article
-              </Button>
-            </div>
+            <nav className="flex items-center gap-1.5 text-sm">
+              <button onClick={() => router.push("/dashboard")} className="text-[#0052CC] hover:underline">Dashboard</button>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-slate-600 dark:text-slate-400 font-semibold">Knowledge Base</span>
+            </nav>
           }
         />
 
-        <main className="flex-1 overflow-y-auto p-6 space-y-5">
-          {/* AI search status bar */}
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 rounded-xl border border-blue-200 dark:border-blue-800 px-5 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <BookOpen className="w-4 h-4 text-blue-600" />
-              <div>
-                <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">AI Search Index</p>
-                <p className="text-xs text-blue-700 dark:text-blue-400">Last indexed: 18 Apr 2026, 11:42 — {articles.length} articles indexed</p>
+        <main className="flex-1 overflow-y-auto">
+          {/* Hero search */}
+          <div className="bg-gradient-to-br from-[#0052CC] to-[#0747A6] px-6 py-12">
+            <div className="max-w-2xl mx-auto text-center">
+              <BookOpen className="w-10 h-10 text-blue-200 mx-auto mb-3" />
+              <h1 className="text-2xl font-bold text-white mb-2">How can we help?</h1>
+              <p className="text-blue-200 text-sm mb-6">Search our Knowledge Base or browse by category</p>
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                <input
+                  ref={searchRef}
+                  type="text"
+                  value={query}
+                  onChange={(e) => { setQuery(e.target.value); setCategory(""); }}
+                  placeholder="Search articles, guides, FAQs…"
+                  autoFocus
+                  className="w-full pl-12 pr-10 py-3.5 rounded-xl text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-white/50 shadow-lg"
+                />
+                {query && (
+                  <button
+                    onClick={() => setQuery("")}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
-            {reindexDone && <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium"><CheckCircle className="w-3.5 h-3.5" />Re-index complete</span>}
           </div>
 
-          {/* Filters */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 min-w-48 max-w-80">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-              <input value={search} onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Search articles..."
-                className="w-full pl-8 pr-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0052CC]" />
-            </div>
-            <div className="flex gap-1.5">
-              {CATEGORIES.map((cat) => (
-                <button key={cat} onClick={() => { setFilterCat(cat); fetchArticles(search, cat); }}
-                  className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${filterCat === cat ? 'bg-[#0052CC] text-white' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300'}`}>
-                  {cat}
+          <div className="max-w-4xl mx-auto px-6 py-6 space-y-8">
+            {/* New Article Button - Admin Only */}
+            {is3SCAdmin && (
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setShowNewModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#0052CC] hover:bg-[#0747A6] text-white rounded-lg font-medium text-sm transition-colors shadow-md hover:shadow-lg"
+                >
+                  <Plus className="w-4 h-4" />
+                  New Article
                 </button>
-              ))}
-            </div>
-            <span className="ml-auto text-xs text-slate-400">{filtered.length} article{filtered.length !== 1 ? 's' : ''}</span>
-          </div>
-
-          {/* Articles table */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
-            {loading ? (
-              <div className="p-6 space-y-3">
-                {[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />)}
               </div>
-            ) : filtered.length === 0 ? (
-              <div className="p-12 text-center">
-                <BookOpen className="w-10 h-10 mx-auto mb-3 text-slate-300 dark:text-slate-600" />
-                <p className="text-sm text-slate-500">No articles found</p>
-              </div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800">
-                    {['Title', 'Category', 'Tags', 'Views', 'Helpful %', 'Actions'].map((h) => (
-                      <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-                  {filtered.map((article) => (
-                    <tr key={article.slug} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-slate-800 dark:text-slate-200 truncate max-w-xs">{article.title}</p>
-                        <p className="text-xs text-slate-400 truncate max-w-xs mt-0.5">{article.summary}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs px-2 py-0.5 rounded font-medium ${CAT_COLORS[article.category] ?? 'bg-slate-100 text-slate-600'}`}>
-                          {article.category}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {(article.tags ?? []).slice(0, 2).map((tag) => (
-                            <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded">{tag}</span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{article.views ?? Math.floor(Math.random() * 200) + 10}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-14 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${article.helpful ?? Math.floor(Math.random() * 30) + 70}%` }} />
-                          </div>
-                          <span className="text-xs text-slate-600 dark:text-slate-400">{article.helpful ?? Math.floor(Math.random() * 30) + 70}%</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <button onClick={() => router.push(`/knowledge-base/${article.slug}`)}
-                            className="p-1.5 text-slate-400 hover:text-[#0052CC] transition-colors" title="Preview">
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
-                          <button className="p-1.5 text-slate-400 hover:text-amber-600 transition-colors" title="Edit">
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => setDeleteSlug(article.slug)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 transition-colors" title="Delete">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             )}
+
+            {/* Category tiles — always visible */}
+            <div>
+              <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-4">Browse by Category</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                {CATEGORIES.map(({ key, label, icon: Icon, color, bg }) => (
+                  <button
+                    key={key}
+                    onClick={() => { setCategory(category === key ? "" : key); setQuery(""); }}
+                    className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all hover:shadow-md ${
+                      category === key
+                        ? `${bg} shadow-md ring-2 ring-offset-2 ring-[#0052CC]/30`
+                        : `${bg} hover:border-slate-300`
+                    }`}
+                  >
+                    <Icon className={`w-6 h-6 ${color}`} />
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 text-center leading-tight">{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Articles list */}
+            {showArticleList && (
+              <div>
+                <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-4">
+                  {loading ? "Searching…" : `${articles.length} article${articles.length !== 1 ? "s" : ""} found`}
+                </h2>
+                {loading ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {[...Array(6)].map((_, i) => (
+                      <div key={i} className="h-40 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 animate-pulse" />
+                    ))}
+                  </div>
+                ) : articles.length === 0 ? (
+                  <div className="text-center py-10">
+                    <Search className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                    <p className="text-sm text-slate-500 dark:text-slate-400">No articles found for "{query || category}"</p>
+                    <p className="text-xs text-slate-400 mt-1">Try different keywords or browse by category</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {articles.map((article) => {
+                      const cat = CATEGORIES.find((c) => c.key === article.category);
+                      const Icon = cat?.icon ?? BookOpen;
+                      return (
+                        <div
+                          key={article.id}
+                          className="flex flex-col gap-3 p-5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-[#0052CC] dark:hover:border-blue-500 hover:shadow-lg transition-all group"
+                        >
+                          {/* Icon & Category Header */}
+                          <div className="flex items-start justify-between">
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${cat?.bg ?? "bg-slate-100"}`}>
+                              <Icon className={`w-5 h-5 ${cat?.color ?? "text-slate-500"}`} />
+                            </div>
+                            <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 uppercase tracking-wide">
+                              {article.category}
+                            </span>
+                          </div>
+
+                          {/* Title & Description */}
+                          <div>
+                            <h3 className="font-bold text-slate-900 dark:text-slate-100 group-hover:text-[#0052CC] dark:group-hover:text-blue-400 transition-colors line-clamp-2">
+                              {article.title}
+                            </h3>
+                            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1.5 line-clamp-2">
+                              {article.summary || article.description || "No description"}
+                            </p>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex items-center gap-2 mt-auto pt-3 border-t border-slate-200 dark:border-slate-700">
+                            <button
+                              onClick={() => router.push(`/knowledge-base/${article.slug || article.id}`)}
+                              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-[#0052CC] hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-lg transition-colors"
+                            >
+                              <Eye className="w-4 h-4" />
+                              View
+                            </button>
+                            {is3SCAdmin && (
+                              <>
+                                <button
+                                  onClick={() => router.push(`/admin/kb/${article.slug || article.id}/edit`)}
+                                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-lg transition-colors"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                  Edit
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Default: Popular articles when nothing searched */}
+            {!showArticleList && (
+              <PopularArticles router={router} />
+            )}
+
           </div>
         </main>
       </div>
 
-      {/* Create article modal */}
-      {showCreate && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 sticky top-0 bg-white dark:bg-slate-900">
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">New KB Article</h2>
-              <button onClick={() => setShowCreate(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+      {/* New Article Modal - Simple */}
+      {showNewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-lg shadow-lg max-w-md w-full">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">New Article</h2>
+              <button
+                onClick={() => {
+                  setShowNewModal(false);
+                  setNewTitle("");
+                  setNewCategory("");
+                  setNewContent("");
+                }}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <div className="p-5 space-y-4">
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Title *</Label>
-                <Input value={form.title} onChange={(e) => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Article title..." />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Category</Label>
-                  <select value={form.category} onChange={(e) => setForm(p => ({ ...p, category: e.target.value }))}
-                    className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-[#0052CC] text-slate-800 dark:text-slate-200">
-                    {CATEGORIES.slice(1).map((c) => <option key={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Tags (comma separated)</Label>
-                  <Input value={form.tags} onChange={(e) => setForm(p => ({ ...p, tags: e.target.value }))} placeholder="billing, invoice, payment" />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Summary</Label>
-                <Input value={form.summary} onChange={(e) => setForm(p => ({ ...p, summary: e.target.value }))} placeholder="Brief description shown in search results..." />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Content (Markdown)</Label>
-                <textarea value={form.content} onChange={(e) => setForm(p => ({ ...p, content: e.target.value }))}
-                  rows={10} placeholder="## Section heading&#10;&#10;Article content goes here..."
-                  className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0052CC] resize-none font-mono" />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <Button variant="outline" onClick={() => setShowCreate(false)} className="flex-1">Cancel</Button>
-                <Button disabled={saving || !form.title.trim()} className="flex-1 bg-[#0052CC] hover:bg-[#0747A6] text-white">
-                  {saving ? 'Publishing...' : 'Publish Article'}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Delete confirm */}
-      {deleteSlug && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 w-full max-w-sm shadow-xl p-5">
-            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-2">Delete Article?</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-5">This action cannot be undone. The article will be removed from the knowledge base.</p>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={() => setDeleteSlug(null)} className="flex-1">Cancel</Button>
-              <Button onClick={() => setDeleteSlug(null)} className="flex-1 bg-red-600 hover:bg-red-700 text-white">Delete</Button>
-            </div>
+            {/* Form */}
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!newTitle || !newCategory) return;
+                
+                setSaving(true);
+                try {
+                  const res = await fetch("/api/knowledge-base", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      title: newTitle,
+                      category: newCategory,
+                      content: newContent,
+                    }),
+                  });
+
+                  if (res.ok) {
+                    const data = await res.json();
+                    setShowNewModal(false);
+                    setNewTitle("");
+                    setNewCategory("");
+                    setNewContent("");
+                    fetchArticles(query, category);
+                  }
+                } catch (err) {
+                  console.error(err);
+                } finally {
+                  setSaving(false);
+                }
+              }}
+              className="p-6 space-y-4"
+            >
+              {/* Title */}
+              <div>
+                <label className="block text-sm font-medium text-slate-900 dark:text-white mb-1.5">Title</label>
+                <input
+                  type="text"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder="Article title"
+                  required
+                  maxLength={100}
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="block text-sm font-medium text-slate-900 dark:text-white mb-1.5">Category</label>
+                <select
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select category</option>
+                  {CATEGORIES.map((cat) => (
+                    <option key={cat.key} value={cat.key}>
+                      {cat.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Content */}
+              <div>
+                <label className="block text-sm font-medium text-slate-900 dark:text-white mb-1.5">Content</label>
+                <textarea
+                  value={newContent}
+                  onChange={(e) => setNewContent(e.target.value)}
+                  placeholder="Article content"
+                  rows={4}
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                />
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNewModal(false);
+                    setNewTitle("");
+                    setNewCategory("");
+                    setNewContent("");
+                  }}
+                  disabled={saving}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !newTitle || !newCategory}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {saving ? "Creating..." : "Create"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function PopularArticles({ router }: { router: ReturnType<typeof useRouter> }) {
+  const [articles, setArticles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/knowledge-base")
+      .then((r) => r.json())
+      .then((d) => {
+        setArticles(d.articles ?? []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div>
+        <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-4">Essential Planning Guides</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-32 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (articles.length === 0) return null;
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-1">Essential Planning Guides</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Learn production planning, material management, and replenishment strategies</p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {articles.map((article) => {
+          const cat = CATEGORIES.find((c) => c.key === article.category);
+          const Icon = cat?.icon ?? BookOpen;
+          return (
+            <button
+              key={article.id}
+              onClick={() => router.push(`/knowledge-base/${article.slug || article.id}`)}
+              className="flex flex-col gap-3 p-5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-[#0052CC] dark:hover:border-blue-500 hover:shadow-lg transition-all text-left group"
+            >
+              {/* Icon & Category Header */}
+              <div className="flex items-start justify-between">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${cat?.bg ?? "bg-slate-100"}`}>
+                  <Icon className={`w-5 h-5 ${cat?.color ?? "text-slate-500"}`} />
+                </div>
+                <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 uppercase tracking-wide">
+                  {article.category}
+                </span>
+              </div>
+
+              {/* Title & Summary */}
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 group-hover:text-[#0052CC] dark:group-hover:text-blue-400 transition-colors leading-snug mb-1.5">
+                  {article.title}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                  {article.summary || article.content?.substring(0, 80) + "..."}
+                </p>
+              </div>
+
+              {/* Read More Link */}
+              <div className="flex items-center gap-1 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs font-medium text-[#0052CC] dark:text-blue-400 group-hover:gap-2 transition-all">
+                <span>Read article</span>
+                <ArrowRight className="w-3 h-3" />
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

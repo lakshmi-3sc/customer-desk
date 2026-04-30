@@ -21,6 +21,8 @@ const CATEGORIES = [
   { key: "Production", label: "Production Planning", icon: Factory, color: "text-cyan-600 dark:text-cyan-400", bg: "bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200 dark:border-cyan-800" },
   { key: "RawMaterial", label: "Raw Material Planning", icon: Package, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-950/40 border-orange-200 dark:border-orange-800" },
   { key: "Replenishment", label: "SaaS Replenishment", icon: GitBranch, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800" },
+  { key: "Troubleshooting", label: "Troubleshooting", icon: Factory, color: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800" },
+  { key: "BestPractices", label: "Best Practices", icon: BookOpen, color: "text-green-600 dark:text-green-400", bg: "bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-800" },
 ];
 
 export default function KnowledgeBasePage() {
@@ -161,9 +163,16 @@ export default function KnowledgeBasePage() {
                             <Icon className={`w-4 h-4 ${cat?.color ?? "text-slate-500"}`} />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 group-hover:text-[#0052CC] dark:group-hover:text-blue-400 transition-colors">
-                              {article.title}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 group-hover:text-[#0052CC] dark:group-hover:text-blue-400 transition-colors">
+                                {article.title}
+                              </p>
+                              {article.isInternal && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 text-[10px] font-semibold uppercase tracking-wide">
+                                  Internal
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">{article.summary}</p>
                             <span className="inline-block mt-1 text-[10px] font-medium text-slate-400 uppercase tracking-wide">{article.category}</span>
                           </div>
