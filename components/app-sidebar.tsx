@@ -27,6 +27,8 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { useWorkspace } from "@/lib/workspace-context";
+import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 
 interface NavItemProps {
   href: string;
@@ -77,6 +79,7 @@ function NavItem({ href, icon, label, active, indent, badge, collapsed }: NavIte
 export function AppSidebar() {
   const { data: session } = useSession();
   const pathname = usePathname();
+  const { currentWorkspace } = useWorkspace();
   const [collapsed, setCollapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [ticketsOpen, setTicketsOpen] = useState(true);
@@ -113,26 +116,43 @@ export function AppSidebar() {
 
   if (!mounted) return null;
 
+  const sidebarStyle = currentWorkspace
+    ? {
+        backgroundColor: currentWorkspace.primaryColor,
+      }
+    : {};
+
   return (
     <div
       className={cn(
-        "flex-shrink-0 h-full flex flex-col bg-[#0747A6] dark:bg-slate-900 overflow-hidden border-r border-blue-700/30 dark:border-slate-700 transition-all duration-300",
+        "flex-shrink-0 h-full flex flex-col dark:bg-slate-900 overflow-hidden border-r border-blue-700/30 dark:border-slate-700 transition-all duration-300",
         collapsed ? "w-20" : "w-60"
       )}
+      style={sidebarStyle}
     >
       {/* Header with Logo & Toggle */}
       <div className="h-14 flex items-center justify-between px-3 border-b border-white/10 dark:border-slate-700 flex-shrink-0">
         {!collapsed && (
           <div className="flex items-center gap-2.5 flex-1">
-            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm">
-              <span className="text-xs font-black text-[#0052CC]">3S</span>
-            </div>
+            {currentWorkspace?.logoUrl ? (
+              <img
+                src={currentWorkspace.logoUrl}
+                alt={currentWorkspace.name}
+                className="w-8 h-8 rounded-lg flex-shrink-0 shadow-sm object-cover"
+              />
+            ) : (
+              <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm">
+                <span className="text-xs font-black" style={{ color: currentWorkspace?.primaryColor || "#0052CC" }}>
+                  {currentWorkspace?.name.substring(0, 2).toUpperCase() || "3S"}
+                </span>
+              </div>
+            )}
             <div className="min-w-0">
               <span className="text-white font-bold text-sm block leading-tight truncate">
-                3SC Connect
+                {currentWorkspace?.name || "3SC Connect"}
               </span>
-              <span className="text-blue-200/70 text-[10px] block leading-tight">
-                Portal
+              <span className="text-white/60 text-[10px] block leading-tight">
+                {session?.user?.role === "CLIENT_USER" || session?.user?.role === "CLIENT_ADMIN" ? "Workspace" : "Portal"}
               </span>
             </div>
           </div>
@@ -145,6 +165,9 @@ export function AppSidebar() {
           {collapsed ? <Menu className="w-5 h-5" /> : <X className="w-5 h-5" />}
         </button>
       </div>
+
+      {/* Workspace Switcher */}
+      {!collapsed && <WorkspaceSwitcher />}
 
       {/* Create Button — clients only */}
       {!is3SCTeam && !collapsed && (
