@@ -5,7 +5,7 @@ import { authOptions } from "@/auth";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { slug: string } }
+  { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -14,7 +14,7 @@ export async function POST(
     }
 
     const { helpful } = await request.json();
-    const slug = params.slug;
+    const { slug } = await params;
 
     const article = await prisma.knowledgeBase.findFirst({
       where: { slug },

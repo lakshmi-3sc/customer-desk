@@ -3,9 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
 
-export async function GET(request: NextRequest, { params }: { params: { slug: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
-    const slug = params.slug as string;
+    const { slug } = await params;
     const article = await prisma.knowledgeBase.findUnique({
       where: { slug },
       include: {
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest, { params }: { params: { slug: st
   }
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { slug: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
     const session = await getServerSession(authOptions);
 
@@ -33,7 +33,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { slug: 
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    const slug = params.slug as string;
+    const { slug } = await params;
     const body = await request.json();
     const { title, content, category } = body;
 
