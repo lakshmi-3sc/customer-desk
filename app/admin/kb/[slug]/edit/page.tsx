@@ -75,18 +75,22 @@ export default function EditArticlePage() {
       });
 
       if (!res.ok) {
-        throw new Error(res.status === 403 ? "Unauthorized" : "Failed to save article");
+        throw new Error(
+          res.status === 403 ? "Unauthorized" : "Failed to save article",
+        );
       }
 
       setSaveSuccess(true);
       setTimeout(() => router.push("/admin/kb"), 1500);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Failed to save article");
+      setSaveError(
+        err instanceof Error ? err.message : "Failed to save article",
+      );
     } finally {
       setSaving(false);
     }
   };
-
+  //comment
   return (
     <div className="h-screen flex bg-background">
       <AppSidebar />
@@ -105,8 +109,12 @@ export default function EditArticlePage() {
 
             {/* Header */}
             <div className="mb-8">
-              <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Edit Article</h1>
-              <p className="text-slate-600 dark:text-slate-400">Update the article content, title, and category</p>
+              <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
+                Edit Article
+              </h1>
+              <p className="text-slate-600 dark:text-slate-400">
+                Update the article content, title, and category
+              </p>
             </div>
 
             {/* Loading state */}
@@ -121,8 +129,12 @@ export default function EditArticlePage() {
               <div className="p-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-3 mb-6">
                 <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="font-semibold text-red-900 dark:text-red-200">Error</p>
-                  <p className="text-sm text-red-800 dark:text-red-300">{error}</p>
+                  <p className="font-semibold text-red-900 dark:text-red-200">
+                    Error
+                  </p>
+                  <p className="text-sm text-red-800 dark:text-red-300">
+                    {error}
+                  </p>
                 </div>
               </div>
             )}
@@ -187,8 +199,12 @@ export default function EditArticlePage() {
                   <div className="p-4 bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-lg flex items-start gap-3">
                     <Check className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
                     <div>
-                      <p className="font-semibold text-green-900 dark:text-green-200">Saved successfully</p>
-                      <p className="text-sm text-green-800 dark:text-green-300">Redirecting to KB...</p>
+                      <p className="font-semibold text-green-900 dark:text-green-200">
+                        Saved successfully
+                      </p>
+                      <p className="text-sm text-green-800 dark:text-green-300">
+                        Redirecting to KB...
+                      </p>
                     </div>
                   </div>
                 )}
@@ -198,8 +214,12 @@ export default function EditArticlePage() {
                   <div className="p-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-3">
                     <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
                     <div>
-                      <p className="font-semibold text-red-900 dark:text-red-200">Save failed</p>
-                      <p className="text-sm text-red-800 dark:text-red-300">{saveError}</p>
+                      <p className="font-semibold text-red-900 dark:text-red-200">
+                        Save failed
+                      </p>
+                      <p className="text-sm text-red-800 dark:text-red-300">
+                        {saveError}
+                      </p>
                     </div>
                   </div>
                 )}
