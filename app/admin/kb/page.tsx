@@ -11,17 +11,14 @@ import {
   Package,
   GitBranch,
   Factory,
-  Clock,
   ArrowRight,
-  ArrowUpRight,
   Plus,
   Edit2,
-  Trash2,
   Eye,
-  Loader2,
 } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
+import { getKbPreviewText } from "@/lib/kb-preview";
 
 const CATEGORIES = [
   { key: "Production", label: "Production Planning", icon: Factory, color: "text-cyan-600 dark:text-cyan-400", bg: "bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200 dark:border-cyan-800" },
@@ -31,12 +28,23 @@ const CATEGORIES = [
   { key: "BestPractices", label: "Best Practices", icon: BookOpen, color: "text-green-600 dark:text-green-400", bg: "bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-800" },
 ];
 
+interface KbArticle {
+  id: string;
+  slug?: string | null;
+  title: string;
+  category: string;
+  summary?: string | null;
+  description?: string | null;
+  content?: string | null;
+  isInternal?: boolean;
+}
+
 export default function AdminKBPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
-  const [articles, setArticles] = useState<any[]>([]);
+  const [articles, setArticles] = useState<KbArticle[]>([]);
   const [loading, setLoading] = useState(false);
   const [showNewModal, setShowNewModal] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -178,7 +186,9 @@ export default function AdminKBPage() {
                 ) : articles.length === 0 ? (
                   <div className="text-center py-10">
                     <Search className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
-                    <p className="text-sm text-slate-500 dark:text-slate-400">No articles found for "{query || category}"</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      No articles found for &ldquo;{query || category}&rdquo;
+                    </p>
                     <p className="text-xs text-slate-400 mt-1">Try different keywords or browse by category</p>
                   </div>
                 ) : (
@@ -186,6 +196,7 @@ export default function AdminKBPage() {
                     {articles.map((article) => {
                       const cat = CATEGORIES.find((c) => c.key === article.category);
                       const Icon = cat?.icon ?? BookOpen;
+                      const preview = getKbPreviewText(article);
                       return (
                         <div
                           key={article.id}
@@ -207,7 +218,7 @@ export default function AdminKBPage() {
                               {article.title}
                             </h3>
                             <p className="text-sm text-slate-600 dark:text-slate-400 mt-1.5 line-clamp-2">
-                              {article.summary || article.description || "No description"}
+                              {preview || "No description"}
                             </p>
                           </div>
 
@@ -288,7 +299,6 @@ export default function AdminKBPage() {
                   });
 
                   if (res.ok) {
-                    const data = await res.json();
                     setShowNewModal(false);
                     setNewTitle("");
                     setNewCategory("");
@@ -379,7 +389,7 @@ export default function AdminKBPage() {
 }
 
 function PopularArticles({ router }: { router: ReturnType<typeof useRouter> }) {
-  const [articles, setArticles] = useState<any[]>([]);
+  const [articles, setArticles] = useState<KbArticle[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -417,6 +427,7 @@ function PopularArticles({ router }: { router: ReturnType<typeof useRouter> }) {
         {articles.map((article) => {
           const cat = CATEGORIES.find((c) => c.key === article.category);
           const Icon = cat?.icon ?? BookOpen;
+          const preview = getKbPreviewText(article);
           return (
             <button
               key={article.id}
@@ -439,7 +450,7 @@ function PopularArticles({ router }: { router: ReturnType<typeof useRouter> }) {
                   {article.title}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
-                  {article.summary || article.content?.substring(0, 80) + "..."}
+                  {preview || "No description"}
                 </p>
               </div>
 

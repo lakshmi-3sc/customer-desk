@@ -230,8 +230,8 @@ function CommentNode({
 }: CommentNodeProps) {
   const isReplying = replyTo?.id === comment.id;
   return (
-    <div className={depth > 0 ? "ml-8 border-l-2 border-slate-100 dark:border-slate-700 pl-4" : ""}>
-      <div className="flex gap-3">
+    <div className={depth > 0 ? "border-l-2 border-slate-100 dark:border-slate-700 pl-3 sm:pl-4" : ""}>
+      <div className="flex gap-3 min-w-0">
         <div className={`${depth === 0 ? "w-8 h-8" : "w-7 h-7"} rounded-full bg-[#0747A6] text-white flex items-center justify-center text-xs font-bold flex-shrink-0`}>
           {getInitials(comment.author.name)}
         </div>
@@ -256,7 +256,7 @@ function CommentNode({
                 <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-1">
                   {getInitials(currentUserName)}
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1 mb-1 text-xs text-slate-400">
                     <CornerDownRight className="w-3 h-3" />
                     <span>Replying to <span className="font-medium text-slate-600 dark:text-slate-300">{replyTo.name}</span></span>
@@ -790,10 +790,10 @@ export default function TicketDetailPage() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden">
+    <div className="fixed inset-0 flex overflow-hidden">
       <AppSidebar />
 
-      <div className="flex-1 flex flex-col overflow-hidden bg-[#F4F5F7] dark:bg-slate-950">
+        <div className="min-w-0 flex-1 flex flex-col overflow-hidden bg-[#F4F5F7] dark:bg-slate-950">
         {/* Top breadcrumb bar */}
         <TopBar
           left={
@@ -810,11 +810,11 @@ export default function TicketDetailPage() {
         />
 
         {/* Main content */}
-        <div className="flex-1 overflow-hidden">
-          <div className="h-full flex gap-6 px-6 py-6 overflow-hidden">
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <div className="h-full min-w-0 flex gap-6 px-6 py-6 overflow-hidden">
 
               {/* Left column: ticket header + description + activity */}
-              <div className="flex-[2] min-w-0 overflow-y-auto pr-1">
+              <div className="flex-[2] min-w-0 overflow-y-auto overflow-x-hidden pr-1">
 
                 {/* SLA banner */}
                 {(ticket.slaBreached || ticket.slaBreachRisk || ticket.slaDueAt) && (
@@ -880,14 +880,19 @@ export default function TicketDetailPage() {
 
                 {/* AI Insights card — 3SC team only */}
                 {is3SCTeam && ticket.aiCategory && (
-                  <div className="rounded-md border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/20 p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Bot className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                      <p className="text-sm font-semibold text-purple-800 dark:text-purple-300">AI Classification</p>
-                      <span className="ml-auto text-[10px] font-semibold text-purple-500 dark:text-purple-500 bg-purple-100 dark:bg-purple-900/50 px-1.5 py-0.5 rounded">Auto-detected</span>
+                  <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <div className="mb-3 flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-50 text-[#0052CC] ring-1 ring-blue-100 dark:bg-blue-950/30 dark:ring-blue-900/40">
+                        <Bot className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">AI Classification</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Auto-detected issue signals</p>
+                      </div>
+                      <span className="ml-auto rounded-md bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">Suggested</span>
                     </div>
                     <div className="flex flex-wrap gap-2 mb-3">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-700">
+                      <span className="inline-flex items-center gap-1.5 rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300">
                         <Tag className="w-3 h-3" />
                         {ticket.aiCategory.replace(/_/g, " ")}
                       </span>
@@ -904,7 +909,7 @@ export default function TicketDetailPage() {
                       )}
                     </div>
                     {ticket.aiSummary && (
-                      <p className="text-xs text-purple-700 dark:text-purple-400 leading-relaxed">{ticket.aiSummary}</p>
+                      <p className="border-t border-slate-100 pt-3 text-xs leading-relaxed text-slate-600 dark:border-slate-800 dark:text-slate-300">{ticket.aiSummary}</p>
                     )}
                   </div>
                 )}
@@ -918,7 +923,7 @@ export default function TicketDetailPage() {
                 </div>
 
                 {/* Activity / Comments — tabbed */}
-                <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 flex flex-col">
+                <div className="min-w-0 overflow-hidden bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 flex flex-col">
                   {/* Tab switcher */}
                   <div className="flex border-b border-slate-200 dark:border-slate-800 px-4 pt-1 overflow-x-auto">
                     {([
@@ -951,7 +956,7 @@ export default function TicketDetailPage() {
 
                   {/* Conversation tab */}
                   {detailTab === 'conversation' && (
-                    <div className="p-6 space-y-4">
+                    <div className="min-w-0 overflow-hidden p-6 space-y-4">
                       {/* Summarize Button - Positioned on right */}
                       {comments.filter((c) => !c.isInternal).length > 0 && (
                         <div className="flex justify-end">
@@ -1004,7 +1009,7 @@ export default function TicketDetailPage() {
                       )}
 
                       {comments.filter((c) => !c.isInternal).length > 0 && (
-                        <div className="space-y-5 mb-6">
+                        <div className="min-w-0 space-y-5 mb-6 overflow-hidden">
                           {comments.filter((c) => !c.isInternal).map((c) => (
                             <CommentNode
                               key={c.id}
@@ -1026,11 +1031,11 @@ export default function TicketDetailPage() {
                           ))}
                         </div>
                       )}
-                      <div className="flex gap-3">
+                      <div className="flex min-w-0 gap-3">
                         <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center text-xs font-bold flex-shrink-0">
                           {session?.user?.name ? getInitials(session.user.name) : "?"}
                         </div>
-                        <form onSubmit={handleAddComment} className="flex-1 space-y-2">
+                        <form onSubmit={handleAddComment} className="min-w-0 flex-1 space-y-2">
                           <Label htmlFor="comment" className="sr-only">Add a comment</Label>
                           <div className="relative">
                             <textarea
@@ -1069,11 +1074,11 @@ export default function TicketDetailPage() {
                           </div>
                           {/* Selected attachments preview */}
                           {commentAttachments.length > 0 && (
-                            <div className="space-y-2 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-md border border-slate-200 dark:border-slate-700">
+                            <div className="min-w-0 space-y-2 overflow-hidden bg-slate-50 dark:bg-slate-800/50 p-3 rounded-md border border-slate-200 dark:border-slate-700">
                               {commentAttachments.map((file, idx) => (
-                                <div key={idx} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                                <div key={idx} className="flex min-w-0 items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
                                   <Paperclip className="w-3.5 h-3.5 text-slate-400" />
-                                  <span className="truncate flex-1">{file.name}</span>
+                                  <span className="min-w-0 flex-1 truncate">{file.name}</span>
                                   <span className="text-xs text-slate-500">({(file.size / 1024).toFixed(1)} KB)</span>
                                   <button
                                     type="button"
@@ -1251,7 +1256,7 @@ export default function TicketDetailPage() {
               </div>
 
               {/* Right column: metadata sidebar */}
-              <div className="w-80 flex-shrink-0 overflow-y-auto space-y-3 pb-6">
+              <div className="w-80 flex-shrink-0 overflow-y-auto overflow-x-hidden space-y-3 pb-6">
 
                 {/* Top info card: Status, Assignee, Dates, Reporter */}
                 <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 p-4 space-y-4">

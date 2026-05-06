@@ -46,20 +46,20 @@ export function TopBar({ left, right }: TopBarProps) {
   }, []);
 
   return (
-    <header className="h-14 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 flex-shrink-0 shadow-sm gap-4">
+    <header className="h-14 bg-white/95 dark:bg-slate-950/95 border-b border-slate-200 dark:border-slate-800 flex items-center px-6 flex-shrink-0 gap-4 backdrop-blur">
       {/* Left: breadcrumb / title */}
-      <div className="flex items-center min-w-0 flex-shrink-0">{left}</div>
+      <div className="flex min-w-0 flex-1 items-center">{left}</div>
 
       {/* Centre: search */}
-      <form onSubmit={handleSearch} className="flex-1 max-w-md mx-auto">
+      <form onSubmit={handleSearch} className="hidden md:block w-full max-w-sm flex-shrink-0">
         <div
-          className={`flex items-center gap-2 rounded-md border px-3 py-1.5 transition-colors ${
+          className={`flex h-9 items-center gap-2 rounded-lg border px-3 transition-colors ${
             focused
-              ? "border-[#0052CC] bg-white dark:bg-slate-800 dark:border-blue-500"
-              : "border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-600"
+              ? "border-[#0052CC]/60 bg-white ring-3 ring-blue-100/70 dark:bg-slate-900 dark:border-blue-500 dark:ring-blue-950/40"
+              : "border-slate-200 bg-slate-50/80 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900/80 dark:hover:border-slate-700"
           }`}
         >
-          <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+          <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
           <input
             ref={inputRef}
             type="text"
@@ -68,18 +68,18 @@ export function TopBar({ left, right }: TopBarProps) {
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             placeholder="Search tickets…"
-            className="flex-1 bg-transparent text-sm text-slate-800 dark:text-slate-200 placeholder-slate-400 outline-none min-w-0"
+            className="min-w-0 flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-200"
           />
           {query ? (
             <button
               type="button"
               onClick={clearSearch}
-              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 flex-shrink-0"
+              className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 flex-shrink-0"
             >
               <X className="w-3.5 h-3.5" />
             </button>
           ) : (
-            <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-[10px] text-slate-400 dark:text-slate-500 font-mono flex-shrink-0">
+            <kbd className="hidden lg:inline-flex items-center px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-[10px] text-slate-400 dark:text-slate-500 font-mono flex-shrink-0">
               ⌘K
             </kbd>
           )}
@@ -87,8 +87,9 @@ export function TopBar({ left, right }: TopBarProps) {
       </form>
 
       {/* Right: extra actions + notifications + profile */}
-      <div className="flex items-center gap-1 flex-shrink-0">
+      <div className="flex flex-shrink-0 items-center gap-1.5">
         {right}
+        {right && <div className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-800" />}
         <NotificationBell />
         <ProfileDropdown />
       </div>

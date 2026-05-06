@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
 import {
   Users, AlertCircle, TrendingUp, ShieldCheck, Zap, Bell, Activity,
-  RefreshCw, ChevronRight, ArrowUpRight, Bot, BarChart3, Server,
+  RefreshCw, ChevronRight, ArrowUpRight, Bot, BarChart3,
   CheckCircle, AlertTriangle, XCircle, Sparkles,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
 import {
@@ -34,7 +34,16 @@ interface Stats {
   aiStats: { classifiedToday: number; suggestionsUsed: number; avgAccuracy: number; routingDecisions: number };
 }
 
-function KpiCard({ label, value, sub, color, icon: Icon, onClick }: any) {
+interface KpiCardProps {
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  color: string;
+  icon: LucideIcon;
+  onClick?: () => void;
+}
+
+function KpiCard({ label, value, sub, color, icon: Icon, onClick }: KpiCardProps) {
   return (
     <div
       onClick={onClick}
@@ -44,7 +53,7 @@ function KpiCard({ label, value, sub, color, icon: Icon, onClick }: any) {
         <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</p>
         <Icon className="w-4 h-4 text-slate-400" />
       </div>
-      <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">{value}</p>
+      <p className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-slate-100">{value}</p>
       {sub && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{sub}</p>}
     </div>
   );
@@ -52,7 +61,6 @@ function KpiCard({ label, value, sub, color, icon: Icon, onClick }: any) {
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const { data: session } = useSession();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -298,7 +306,7 @@ export default function AdminDashboard() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-slate-500 dark:text-slate-400 leading-tight">{label}</p>
-                      <p className="text-lg font-bold text-slate-900 dark:text-slate-100 leading-tight">{loading ? '—' : value}</p>
+                      <p className="text-base font-semibold tabular-nums text-slate-900 dark:text-slate-100 leading-tight">{loading ? '—' : value}</p>
                     </div>
                   </div>
                 ))}
@@ -313,25 +321,6 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* Quick nav shortcuts */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { label: 'Customer Workspaces', icon: Users, route: '/admin/customers', color: 'from-purple-500 to-purple-700' },
-              { label: 'User Management', icon: Activity, route: '/admin/users', color: 'from-blue-500 to-blue-700' },
-              { label: 'SLA Configuration', icon: ShieldCheck, route: '/admin/sla-config', color: 'from-emerald-500 to-emerald-700' },
-              { label: 'Platform Analytics', icon: BarChart3, route: '/admin/analytics', color: 'from-amber-500 to-amber-600' },
-              { label: 'AI Configuration', icon: Bot, route: '/admin/ai-config', color: 'from-indigo-500 to-indigo-700' },
-              { label: 'KB Management', icon: Server, route: '/admin/kb', color: 'from-teal-500 to-teal-700' },
-              { label: 'Audit Trail', icon: AlertTriangle, route: '/admin/audit', color: 'from-rose-500 to-rose-700' },
-              { label: 'System Settings', icon: Zap, route: '/admin/settings', color: 'from-slate-500 to-slate-700' },
-            ].map(({ label, icon: Icon, route, color }) => (
-              <button key={route} onClick={() => router.push(route)}
-                className={`flex items-center gap-3 p-4 rounded-xl bg-gradient-to-br ${color} text-white hover:opacity-90 transition-opacity text-left`}>
-                <Icon className="w-5 h-5 flex-shrink-0 opacity-80" />
-                <span className="text-sm font-semibold">{label}</span>
-              </button>
-            ))}
-          </div>
         </main>
       </div>
     </div>

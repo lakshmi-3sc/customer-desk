@@ -9,7 +9,10 @@ export function ProfileDropdown() {
   const { data: session } = useSession();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [theme, setTheme] = useState<string>("light");
+  const [theme, setTheme] = useState<string>(() => {
+    if (typeof document === "undefined") return "light";
+    return document.documentElement.classList.contains("dark") ? "dark" : "light";
+  });
   const [copied, setCopied] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -25,11 +28,6 @@ export function ProfileDropdown() {
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }
   }, [open]);
-
-  useEffect(() => {
-    const isDark = document.documentElement.classList.contains("dark");
-    setTheme(isDark ? "dark" : "light");
-  }, []);
 
   if (!session?.user) return null;
 
@@ -74,9 +72,9 @@ export function ProfileDropdown() {
     <div ref={dropdownRef} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        className="flex h-9 items-center gap-2 rounded-lg px-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
       >
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#0052CC] to-[#0747A6] text-white flex items-center justify-center text-xs font-bold shadow-sm">
+        <div className="w-8 h-8 rounded-full bg-[#0052CC] text-white flex items-center justify-center text-xs font-semibold shadow-sm">
           {getInitials(session.user.name || "U")}
         </div>
         <ChevronDown className="w-4 h-4 text-slate-600 dark:text-slate-400" />

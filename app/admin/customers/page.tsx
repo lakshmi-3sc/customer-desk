@@ -25,23 +25,21 @@ interface ClientOrg {
   projects: { id: string; name: string; status: string }[];
 }
 
-const AVATAR_GRADIENTS = [
-  "from-blue-500 to-blue-700",
-  "from-violet-500 to-violet-700",
-  "from-emerald-500 to-emerald-700",
-  "from-rose-500 to-rose-700",
-  "from-amber-500 to-amber-600",
-  "from-cyan-500 to-cyan-700",
-  "from-indigo-500 to-indigo-700",
-  "from-teal-500 to-teal-700",
-  "from-fuchsia-500 to-fuchsia-700",
-  "from-orange-500 to-orange-700",
+const AVATAR_STYLES = [
+  { bg: "bg-blue-50 dark:bg-blue-950/30", text: "text-blue-700 dark:text-blue-300", ring: "ring-blue-100 dark:ring-blue-900/50", accent: "bg-blue-500" },
+  { bg: "bg-violet-50 dark:bg-violet-950/30", text: "text-violet-700 dark:text-violet-300", ring: "ring-violet-100 dark:ring-violet-900/50", accent: "bg-violet-500" },
+  { bg: "bg-emerald-50 dark:bg-emerald-950/30", text: "text-emerald-700 dark:text-emerald-300", ring: "ring-emerald-100 dark:ring-emerald-900/50", accent: "bg-emerald-500" },
+  { bg: "bg-rose-50 dark:bg-rose-950/30", text: "text-rose-700 dark:text-rose-300", ring: "ring-rose-100 dark:ring-rose-900/50", accent: "bg-rose-500" },
+  { bg: "bg-amber-50 dark:bg-amber-950/30", text: "text-amber-700 dark:text-amber-300", ring: "ring-amber-100 dark:ring-amber-900/50", accent: "bg-amber-500" },
+  { bg: "bg-cyan-50 dark:bg-cyan-950/30", text: "text-cyan-700 dark:text-cyan-300", ring: "ring-cyan-100 dark:ring-cyan-900/50", accent: "bg-cyan-500" },
+  { bg: "bg-indigo-50 dark:bg-indigo-950/30", text: "text-indigo-700 dark:text-indigo-300", ring: "ring-indigo-100 dark:ring-indigo-900/50", accent: "bg-indigo-500" },
+  { bg: "bg-teal-50 dark:bg-teal-950/30", text: "text-teal-700 dark:text-teal-300", ring: "ring-teal-100 dark:ring-teal-900/50", accent: "bg-teal-500" },
 ];
 
-function avatarGradient(name: string) {
+function avatarStyle(name: string) {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
+  return AVATAR_STYLES[Math.abs(hash) % AVATAR_STYLES.length];
 }
 
 function planLabel(c: ClientOrg) {
@@ -71,54 +69,57 @@ function WorkspaceCard({ c, isSelected, onClick }: { c: ClientOrg; isSelected: b
   const breaches = c.issues.filter((i) => i.slaBreached).length;
   const score = healthScore(c);
   const ss = scoreStyle(score);
-  const grad = avatarGradient(c.name);
+  const avatar = avatarStyle(c.name);
 
   return (
     <div
       onClick={onClick}
-      className={`group relative bg-white dark:bg-slate-900 rounded-2xl border-2 transition-all duration-200 cursor-pointer overflow-hidden
+      className={`group relative bg-white dark:bg-slate-900 rounded-lg border transition-all duration-200 cursor-pointer overflow-hidden
         ${isSelected
-          ? "border-[#0052CC] shadow-lg shadow-blue-500/10 scale-[1.01]"
-          : "border-slate-200 dark:border-slate-800 hover:border-[#0052CC]/50 hover:shadow-lg hover:shadow-slate-200/70 dark:hover:shadow-slate-900/60 hover:scale-[1.005]"
+          ? "border-[#0052CC] shadow-sm ring-2 ring-blue-100 dark:ring-blue-950/50"
+          : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-sm"
         }`}
     >
-      <div className={`h-1 w-full bg-gradient-to-r ${grad}`} />
-      <div className={`absolute top-3.5 right-3.5 w-2 h-2 rounded-full ${c.isActive ? "bg-emerald-400" : "bg-slate-300 dark:bg-slate-600"}`} title={c.isActive ? "Active" : "Inactive"} />
-      <div className="p-5">
+      <div className={`h-0.5 w-full ${avatar.accent} opacity-70`} />
+      <div className="p-4">
         <div className="flex items-start gap-3 mb-4">
-          <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${grad} flex items-center justify-center text-white font-bold text-sm flex-shrink-0 shadow-sm`}>
+          <div className={`w-10 h-10 rounded-lg ${avatar.bg} ${avatar.text} ring-1 ${avatar.ring} flex items-center justify-center font-semibold text-sm flex-shrink-0`}>
             {c.name.slice(0, 2).toUpperCase()}
           </div>
-          <div className="min-w-0 flex-1 pr-4">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{c.name}</h3>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{c.name}</h3>
               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold whitespace-nowrap ${plan.color}`}>{plan.label}</span>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1 truncate">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1 truncate">
               <Globe className="w-3 h-3 flex-shrink-0" />{c.industry || "No industry"}
             </p>
           </div>
+          <span className={`mt-1 flex items-center gap-1 text-[10px] font-medium ${c.isActive ? "text-emerald-600" : "text-slate-400"}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${c.isActive ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`} />
+            {c.isActive ? "Active" : "Inactive"}
+          </span>
         </div>
 
         <div className="grid grid-cols-3 gap-2 mb-4">
-          <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-2.5 text-center">
-            <p className="text-base font-black text-slate-800 dark:text-slate-200">{c.members.length}</p>
-            <p className="text-[10px] text-slate-400 mt-0.5">Users</p>
+          <div className="bg-slate-50 dark:bg-slate-800/50 rounded-md p-2.5 text-center">
+            <p className="text-base font-semibold tabular-nums text-slate-800 dark:text-slate-200">{c.members.length}</p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Users</p>
           </div>
-          <div className={`rounded-xl p-2.5 text-center ${openIssues > 0 ? "bg-red-50 dark:bg-red-950/30" : "bg-slate-50 dark:bg-slate-800/60"}`}>
-            <p className={`text-base font-black ${openIssues > 0 ? "text-red-600" : "text-slate-800 dark:text-slate-200"}`}>{openIssues}</p>
-            <p className="text-[10px] text-slate-400 mt-0.5">Open</p>
+          <div className={`rounded-md p-2.5 text-center ${openIssues > 0 ? "bg-red-50/80 dark:bg-red-950/20" : "bg-slate-50 dark:bg-slate-800/50"}`}>
+            <p className={`text-base font-semibold tabular-nums ${openIssues > 0 ? "text-red-600" : "text-slate-800 dark:text-slate-200"}`}>{openIssues}</p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Open</p>
           </div>
-          <div className="bg-emerald-50 dark:bg-emerald-950/20 rounded-xl p-2.5 text-center">
-            <p className="text-base font-black text-emerald-600">{resolved}</p>
-            <p className="text-[10px] text-slate-400 mt-0.5">Resolved</p>
+          <div className="bg-emerald-50/70 dark:bg-emerald-950/20 rounded-md p-2.5 text-center">
+            <p className="text-base font-semibold tabular-nums text-emerald-600">{resolved}</p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Resolved</p>
           </div>
         </div>
 
         <div className="mb-4">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Health</span>
-            <span className={`text-xs font-black ${ss.text}`}>{score}%</span>
+            <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Health</span>
+            <span className={`text-xs font-semibold tabular-nums ${ss.text}`}>{score}%</span>
           </div>
           <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
             <div className="h-full rounded-full transition-all duration-500" style={{ width: `${score}%`, backgroundColor: ss.bar }} />
@@ -136,13 +137,9 @@ function WorkspaceCard({ c, isSelected, onClick }: { c: ClientOrg; isSelected: b
               <Layers className="w-2.5 h-2.5" />{c.projects.length} project{c.projects.length !== 1 ? "s" : ""}
             </span>
           </div>
-          <span className={`flex items-center gap-1 text-[10px] font-semibold ${c.isActive ? "text-emerald-600" : "text-slate-400"}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${c.isActive ? "bg-emerald-400" : "bg-slate-300 dark:bg-slate-600"}`} />
-            {c.isActive ? "Active" : "Inactive"}
-          </span>
+          <ChevronRight className="w-4 h-4 text-slate-300 transition-colors group-hover:text-[#0052CC]" />
         </div>
       </div>
-      <div className={`absolute inset-x-0 bottom-0 h-0.5 bg-gradient-to-r ${grad} transition-opacity duration-300 ${isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-60"}`} />
     </div>
   );
 }
@@ -257,7 +254,7 @@ function CustomerWorkspacesContent() {
                       <Icon className={`w-4 h-4 ${colorText}`} />
                     </div>
                     <div>
-                      <p className={`text-xl font-black ${colorText}`}>{loading ? "—" : value}</p>
+                      <p className={`text-xl font-semibold tabular-nums ${colorText}`}>{loading ? "—" : value}</p>
                       <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400">{label}</p>
                     </div>
                   </div>
@@ -288,12 +285,12 @@ function CustomerWorkspacesContent() {
               {loading ? (
                 <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
                   {[...Array(6)].map((_, i) => (
-                    <div key={i} className="h-56 bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-100 dark:border-slate-800 animate-pulse" />
+                    <div key={i} className="h-56 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800 animate-pulse" />
                   ))}
                 </div>
               ) : filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
-                  <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
+                  <div className="w-16 h-16 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
                     <Building2 className="w-8 h-8 text-slate-300 dark:text-slate-600" />
                   </div>
                   <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">No workspaces found</p>
@@ -316,7 +313,7 @@ function CustomerWorkspacesContent() {
           </div>
 
           {selected && (() => {
-            const grad = avatarGradient(selected.name);
+            const avatar = avatarStyle(selected.name);
             const score = healthScore(selected);
             const ss = scoreStyle(score);
             const openIssues = selected.issues.filter((i) => ["OPEN", "IN_PROGRESS", "ACKNOWLEDGED"].includes(i.status)).length;
@@ -325,34 +322,34 @@ function CustomerWorkspacesContent() {
             const plan = planLabel(selected);
             return (
               <div className="flex-1 border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col overflow-hidden">
-                <div className={`bg-gradient-to-br ${grad} p-6 text-white relative overflow-hidden flex-shrink-0`}>
-                  <div className="absolute inset-0 opacity-10 pointer-events-none">
-                    <div className="absolute -top-8 -right-8 w-40 h-40 rounded-full bg-white" />
-                    <div className="absolute -bottom-10 -left-5 w-28 h-28 rounded-full bg-white" />
-                  </div>
-                  <div className="relative">
+                <div className="border-b border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-950/40 flex-shrink-0">
+                  <div>
                     <div className="flex items-start justify-between mb-4">
-                      <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-white font-black text-xl border border-white/30">
+                      <div className={`w-12 h-12 rounded-lg ${avatar.bg} ${avatar.text} ring-1 ${avatar.ring} flex items-center justify-center font-semibold text-base`}>
                         {selected.name.slice(0, 2).toUpperCase()}
                       </div>
                       <div className="flex items-center gap-2">
                         <button onClick={() => toggleActive(selected.id, selected.isActive)} disabled={toggling === selected.id}
-                          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-semibold bg-white/20 hover:bg-white/30 text-white border border-white/25 backdrop-blur-sm transition-colors">
+                          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-semibold border transition-colors ${
+                            selected.isActive
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-slate-200 bg-white text-slate-500"
+                          }`}>
                           {selected.isActive ? <ToggleRight className="w-3.5 h-3.5" /> : <ToggleLeft className="w-3.5 h-3.5" />}
                           {selected.isActive ? "Active" : "Inactive"}
                         </button>
-                        <button onClick={() => setSelectedId(null)} className="p-1.5 rounded-full bg-white/10 hover:bg-white/25 text-white transition-colors">
+                        <button onClick={() => setSelectedId(null)} className="p-1.5 rounded-md border border-slate-200 bg-white text-slate-400 hover:text-slate-700 transition-colors">
                           <X className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
-                    <h2 className="text-lg font-black text-white mb-0.5">{selected.name}</h2>
-                    <p className="text-sm text-white/70 flex items-center gap-1.5">
+                    <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-0.5">{selected.name}</h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
                       <Globe className="w-3.5 h-3.5" />{selected.industry || "No industry set"}
                     </p>
                     <div className="flex items-center gap-2 mt-3">
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-white/20 text-white border border-white/20">{plan.label}</span>
-                      <span className="text-[10px] text-white/55">Updated {new Date(selected.updatedAt).toLocaleDateString()}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${plan.color}`}>{plan.label}</span>
+                      <span className="text-[10px] text-slate-400">Updated {new Date(selected.updatedAt).toLocaleDateString()}</span>
                     </div>
                   </div>
                 </div>
@@ -364,7 +361,7 @@ function CustomerWorkspacesContent() {
                     { label: "Projects", value: selected.projects.length, icon: Layers, color: "text-violet-600" },
                   ].map(({ label, value, icon: Icon, color }) => (
                     <div key={label} className="py-3 text-center">
-                      <p className={`text-xl font-black ${color}`}>{value}</p>
+                      <p className={`text-lg font-semibold tabular-nums ${color}`}>{value}</p>
                       <p className="text-[10px] text-slate-400 flex items-center justify-center gap-1 mt-0.5"><Icon className="w-3 h-3" />{label}</p>
                     </div>
                   ))}
@@ -386,7 +383,7 @@ function CustomerWorkspacesContent() {
                       <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-4">
                         <div className="flex items-center justify-between mb-2.5">
                           <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Health Score</p>
-                          <span className={`text-sm font-black ${ss.text}`}>{score}%</span>
+                          <span className={`text-sm font-semibold tabular-nums ${ss.text}`}>{score}%</span>
                         </div>
                         <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                           <div className="h-full rounded-full transition-all duration-700" style={{ width: `${score}%`, backgroundColor: ss.bar }} />
@@ -407,7 +404,7 @@ function CustomerWorkspacesContent() {
                           ].map(({ label, value, textColor, bg, route }) => (
                             <button key={label} onClick={() => route && router.push(route)} disabled={!route}
                               className={`${bg} rounded-xl p-3 text-left transition-colors ${route ? "cursor-pointer" : "cursor-default"}`}>
-                              <p className={`text-lg font-black ${textColor}`}>{value}</p>
+                              <p className={`text-lg font-semibold tabular-nums ${textColor}`}>{value}</p>
                               <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">{label}</p>
                             </button>
                           ))}
@@ -446,7 +443,7 @@ function CustomerWorkspacesContent() {
                         <div className="space-y-2">
                           {selected.members.map(({ user: u }) => (
                             <div key={u.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                              <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${avatarGradient(u.name)} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
+                              <div className={`w-8 h-8 rounded-full ${avatarStyle(u.name).bg} ${avatarStyle(u.name).text} ring-1 ${avatarStyle(u.name).ring} flex items-center justify-center text-xs font-semibold flex-shrink-0`}>
                                 {u.name.slice(0, 2).toUpperCase()}
                               </div>
                               <div className="flex-1 min-w-0">

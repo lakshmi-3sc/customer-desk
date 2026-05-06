@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   CheckCircle,
-  Clock,
   Plus,
   ArrowUpRight,
   RefreshCw,
@@ -18,9 +17,17 @@ import { Button } from "@/components/ui/button";
 import { useSession } from "next-auth/react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
-import { WeeklySummary } from "@/components/dashboard/WeeklySummary";
 import { CustomerUserInsights } from "@/components/dashboard/CustomerUserInsights";
 import { CustomerAdminInsights } from "@/components/dashboard/CustomerAdminInsights";
+
+interface DashboardIssue {
+  id: string;
+  ticketKey: string | null;
+  title: string;
+  status: string;
+  priority: string;
+  updatedAt: string;
+}
 
 function StatusLozenge({ status }: { status: string }) {
   const map: Record<string, string> = {
@@ -51,7 +58,7 @@ export default function UserDashboard() {
   const { data: session } = useSession();
   const router = useRouter();
 
-  const [issues, setIssues] = useState<any[]>([]);
+  const [issues, setIssues] = useState<DashboardIssue[]>([]);
   const [loading, setLoading] = useState(true);
 
   const firstName = session?.user?.name?.split(" ")[0] ?? "there";
@@ -117,21 +124,41 @@ export default function UserDashboard() {
           <div className="max-w-5xl mx-auto space-y-6">
 
             {/* Welcome Banner */}
-            <div className="bg-gradient-to-r from-[#0052CC] to-[#0747A6] rounded-xl p-6 text-white shadow-md">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-xl font-bold">Hi {firstName}, here's your issue summary 👋</h2>
-                  <p className="text-blue-100 text-sm mt-1">
-                    {loading
-                      ? "Loading your issues…"
-                      : openIssues.length === 0
-                        ? "You have no open issues. Great job!"
-                        : `You have ${openIssues.length} active issue${openIssues.length !== 1 ? "s" : ""} in progress.`}
+            <div className="relative overflow-hidden rounded-lg border border-blue-700/20 bg-[#0B55C8] p-5 text-white shadow-sm">
+              <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.22),transparent_48%)]" />
+              <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-blue-100/80">
+                    Personal support overview
                   </p>
+                  <h2 className="text-xl font-semibold tracking-normal">
+                    Welcome back, {firstName}
+                  </h2>
+                  <p className="mt-1.5 max-w-2xl text-sm leading-5 text-blue-50/90">
+                    {loading
+                      ? "Loading your issue summary..."
+                      : openIssues.length === 0
+                        ? "You have no open issues right now. Everything looks clear."
+                        : `${openIssues.length} active issue${openIssues.length !== 1 ? "s" : ""} need your attention or are currently in progress.`}
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-md bg-white/12 px-2.5 py-1 text-xs font-medium text-white ring-1 ring-white/15">
+                      <AlertCircle className="h-3.5 w-3.5 text-blue-100" />
+                      {loading ? "-" : openIssues.length} active
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-md bg-white/12 px-2.5 py-1 text-xs font-medium text-white ring-1 ring-white/15">
+                      <MessageSquare className="h-3.5 w-3.5 text-blue-100" />
+                      {loading ? "-" : awaitingResponse.length} awaiting response
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-md bg-white/12 px-2.5 py-1 text-xs font-medium text-white ring-1 ring-white/15">
+                      <CheckCircle className="h-3.5 w-3.5 text-blue-100" />
+                      {loading ? "-" : resolvedThisMonth.length} resolved this month
+                    </span>
+                  </div>
                 </div>
                 <Button
                   onClick={() => router.push("/create-ticket")}
-                  className="bg-white text-[#0052CC] hover:bg-blue-50 font-semibold flex-shrink-0 shadow-sm"
+                  className="h-9 flex-shrink-0 bg-white px-4 text-[#0052CC] shadow-sm hover:bg-blue-50"
                 >
                   <Plus className="w-4 h-4 mr-1.5" />
                   Raise New Issue

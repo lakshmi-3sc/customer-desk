@@ -21,11 +21,11 @@ import {
   SlidersHorizontal,
   Layers,
   ShieldAlert,
-  Menu,
-  X,
+  PanelLeftClose,
+  PanelLeftOpen,
   ChevronRight,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/lib/workspace-context";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
@@ -46,15 +46,21 @@ function NavItem({ href, icon, label, active, indent, badge, collapsed }: NavIte
       href={href}
       title={collapsed ? label : ""}
       className={cn(
-        "flex items-center gap-2.5 rounded-md font-medium transition-all duration-200 relative group",
-        collapsed ? "px-3 py-2.5 justify-center" : "px-3 py-2 justify-start",
+        "relative group flex items-center gap-2.5 rounded-md font-medium transition-colors duration-150",
+        collapsed ? "mx-1 px-2.5 py-2.5 justify-center" : "px-3 py-2 justify-start",
         "text-sm",
+        indent && !collapsed && "ml-6",
         active
           ? "bg-white/20 text-white shadow-sm"
           : "text-blue-100 hover:bg-white/10 hover:text-white"
       )}
     >
-      <span className="flex-shrink-0">{icon}</span>
+      {active && !collapsed && (
+        <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-white" />
+      )}
+      <span className={cn("flex-shrink-0", active ? "text-white" : "text-blue-100/80")}>
+        {icon}
+      </span>
       {!collapsed && (
         <>
           <span className="flex-1 truncate">{label}</span>
@@ -68,7 +74,7 @@ function NavItem({ href, icon, label, active, indent, badge, collapsed }: NavIte
 
       {/* Tooltip for collapsed state */}
       {collapsed && (
-        <div className="absolute left-full ml-2 px-2 py-1 bg-slate-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+        <div className="absolute left-full ml-2 px-2 py-1 bg-slate-950 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-lg">
           {label}
         </div>
       )}
@@ -76,22 +82,34 @@ function NavItem({ href, icon, label, active, indent, badge, collapsed }: NavIte
   );
 }
 
+function SectionLabel({ children, collapsed }: { children: React.ReactNode; collapsed?: boolean }) {
+  if (collapsed) {
+    return <div className="mx-3 my-2 h-px bg-white/15" />;
+  }
+
+  return (
+    <div className="px-3 pt-4 pb-1.5">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-200/70">
+        {children}
+      </p>
+    </div>
+  );
+}
+
 export function AppSidebar() {
   const { data: session } = useSession();
   const pathname = usePathname();
   const { currentWorkspace } = useWorkspace();
-  const [collapsed, setCollapsed] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const [ticketsOpen, setTicketsOpen] = useState(true);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
 
-  // Load sidebar state from localStorage
-  useEffect(() => {
-    setMounted(true);
-    const saved = localStorage.getItem("sidebar-collapsed");
-    if (saved) {
-      setCollapsed(JSON.parse(saved));
+    try {
+      return JSON.parse(localStorage.getItem("sidebar-collapsed") || "false");
+    } catch {
+      return false;
     }
-  }, []);
+  });
+  const [ticketsOpen, setTicketsOpen] = useState(true);
 
   // Save sidebar state to localStorage
   const toggleSidebar = () => {
@@ -114,72 +132,73 @@ export function AppSidebar() {
   const isTicketsActive =
     pathname === "/tickets" || isTicketDetail;
 
-  if (!mounted) return null;
-
-  const sidebarStyle = currentWorkspace
-    ? {
-        backgroundColor: currentWorkspace.primaryColor,
-      }
-    : {};
+  const isClientWorkspace = !is3SCTeam;
+  const sidebarColor = isClientWorkspace ? currentWorkspace?.primaryColor || "#0052CC" : "#0052CC";
+  const portalName = isClientWorkspace ? currentWorkspace?.name || "3SC Connect" : "3SC Connect";
+  const portalSubtitle = isClientWorkspace ? "Workspace" : isAdmin ? "Admin Portal" : isLead ? "Lead Portal" : isAgent ? "Agent Portal" : "Portal";
+  const portalInitials = isClientWorkspace ? currentWorkspace?.name.substring(0, 2).toUpperCase() || "3S" : "3S";
 
   return (
     <div
       className={cn(
-        "flex-shrink-0 h-full flex flex-col dark:bg-slate-900 overflow-hidden border-r border-blue-700/30 dark:border-slate-700 transition-all duration-300",
-        collapsed ? "w-20" : "w-60"
+        "flex-shrink-0 h-full flex flex-col overflow-hidden border-r border-blue-900/20 transition-all duration-300",
+        collapsed ? "w-[72px]" : "w-64"
       )}
-      style={sidebarStyle}
+      style={{ backgroundColor: sidebarColor }}
     >
       {/* Header with Logo & Toggle */}
-      <div className="h-14 flex items-center justify-between px-3 border-b border-white/10 dark:border-slate-700 flex-shrink-0">
+      <div className="h-14 flex items-center justify-between gap-2 px-3 border-b border-white/10 flex-shrink-0">
         {!collapsed && (
-          <div className="flex items-center gap-2.5 flex-1">
-            {currentWorkspace?.logoUrl ? (
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            {isClientWorkspace && currentWorkspace?.logoUrl ? (
               <img
                 src={currentWorkspace.logoUrl}
                 alt={currentWorkspace.name}
-                className="w-8 h-8 rounded-lg flex-shrink-0 shadow-sm object-cover"
+                className="w-8 h-8 rounded-md flex-shrink-0 object-cover ring-1 ring-white/20"
               />
             ) : (
-              <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm">
-                <span className="text-xs font-black" style={{ color: currentWorkspace?.primaryColor || "#0052CC" }}>
-                  {currentWorkspace?.name.substring(0, 2).toUpperCase() || "3S"}
+              <div
+                className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 bg-white text-[#0052CC] shadow-sm"
+              >
+                <span className="text-xs font-black">
+                  {portalInitials}
                 </span>
               </div>
             )}
             <div className="min-w-0">
-              <span className="text-white font-bold text-sm block leading-tight truncate">
-                {currentWorkspace?.name || "3SC Connect"}
+              <span className="text-white font-semibold text-sm block leading-tight truncate">
+                {portalName}
               </span>
-              <span className="text-white/60 text-[10px] block leading-tight">
-                {session?.user?.role === "CLIENT_USER" || session?.user?.role === "CLIENT_ADMIN" ? "Workspace" : "Portal"}
+              <span className="text-blue-100/70 text-[11px] block leading-tight">
+                {portalSubtitle}
               </span>
             </div>
           </div>
         )}
         <button
           onClick={toggleSidebar}
-          className="p-1.5 hover:bg-white/10 rounded-md transition-colors text-blue-100 hover:text-white flex-shrink-0"
+          className="p-1.5 rounded-md transition-colors text-blue-100 hover:bg-white/10 hover:text-white flex-shrink-0"
           title={collapsed ? "Expand" : "Collapse"}
         >
-          {collapsed ? <Menu className="w-5 h-5" /> : <X className="w-5 h-5" />}
+          {collapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
         </button>
       </div>
 
       {/* Workspace Switcher */}
-      {!collapsed && <WorkspaceSwitcher />}
+      {!collapsed && isClientWorkspace && <WorkspaceSwitcher />}
 
       {/* Create Button — clients only */}
       {!is3SCTeam && !collapsed && (
-        <div className="px-3 pt-4 pb-2 flex-shrink-0">
+        <div className="px-3 pt-4 pb-3 flex-shrink-0">
           <Link
             href="/create-ticket"
             className={cn(
-              "flex items-center justify-center gap-2 w-full py-2 px-4 rounded-md text-sm font-semibold transition-colors",
+              "flex items-center justify-center gap-2 w-full py-2 px-4 rounded-md text-sm font-semibold text-white transition-colors shadow-sm",
               pathname === "/create-ticket"
-                ? "bg-white text-[#0052CC]"
-                : "bg-white/90 text-[#0052CC] hover:bg-white shadow-sm"
+                ? "opacity-95"
+                : "hover:opacity-90"
             )}
+            style={{ backgroundColor: sidebarColor }}
           >
             <Plus className="w-4 h-4" />
             Create Ticket
@@ -192,7 +211,8 @@ export function AppSidebar() {
           <Link
             href="/create-ticket"
             title="Create Ticket"
-            className="flex items-center justify-center w-full py-2.5 px-3 rounded-md bg-white/90 text-[#0052CC] hover:bg-white transition-colors"
+            className="flex items-center justify-center w-full py-2.5 px-3 rounded-md text-white transition-colors hover:opacity-90"
+            style={{ backgroundColor: sidebarColor }}
           >
             <Plus className="w-5 h-5" />
           </Link>
@@ -200,29 +220,31 @@ export function AppSidebar() {
       )}
 
       {/* Navigation */}
-      <nav className="flex-1 py-2 px-2 overflow-y-auto space-y-0.5">
-        <NavItem
-          href="/dashboard"
-          icon={<LayoutDashboard className="w-5 h-5" />}
-          label="Dashboard"
-          active={pathname === "/dashboard"}
-          collapsed={collapsed}
-        />
+      <nav className="flex-1 py-3 px-2 overflow-y-auto space-y-0.5">
+        {!is3SCTeam && (
+          <NavItem
+            href="/dashboard"
+            icon={<LayoutDashboard className="w-5 h-5" />}
+            label="Dashboard"
+            active={pathname === "/dashboard"}
+            collapsed={collapsed}
+          />
+        )}
 
         {/* Tickets Accordion */}
-        {!collapsed && (
+        {!is3SCTeam && !collapsed && (
           <div>
             <button
               onClick={() => setTicketsOpen(!ticketsOpen)}
               className={cn(
                 "flex items-center justify-between w-full px-3 py-2 rounded-md text-sm font-medium transition-all duration-150",
                 isTicketsActive
-                  ? "bg-white/20 text-white"
+                  ? "bg-white/20 text-white shadow-sm"
                   : "text-blue-100 hover:bg-white/10 hover:text-white"
               )}
             >
               <div className="flex items-center gap-2.5">
-                <Ticket className="w-5 h-5 flex-shrink-0" />
+                <Ticket className={cn("w-5 h-5 flex-shrink-0", isTicketsActive ? "text-white" : "text-blue-100/80")} />
                 <span>Issues</span>
               </div>
               <ChevronRight className={cn("w-3 h-3 transition-transform", ticketsOpen && "rotate-90")} />
@@ -232,7 +254,7 @@ export function AppSidebar() {
               <div className="mt-0.5 space-y-0.5">
                 <NavItem
                   href="/tickets"
-                  icon={<div className="w-2 h-2 rounded-full bg-slate-300" />}
+                  icon={<div className="w-1.5 h-1.5 rounded-full bg-current" />}
                   label={is3SCTeam ? "All Issues" : isClientUser ? "My Issues" : "All Tickets"}
                   active={pathname === "/tickets"}
                   indent
@@ -243,7 +265,7 @@ export function AppSidebar() {
           </div>
         )}
 
-        {collapsed && (
+        {!is3SCTeam && collapsed && (
           <NavItem
             href="/tickets"
             icon={<Ticket className="w-5 h-5" />}
@@ -310,9 +332,7 @@ export function AppSidebar() {
         {/* THREESC_LEAD nav */}
         {isLead && !collapsed && (
           <>
-            <div className="px-3 pt-3 pb-1">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-300/60">Lead</p>
-            </div>
+            <SectionLabel>Lead</SectionLabel>
             <NavItem href="/dashboard" icon={<LayoutDashboard className="w-5 h-5" />} label="Dashboard" active={pathname === "/dashboard"} collapsed={collapsed} />
             <NavItem href="/tickets" icon={<Ticket className="w-5 h-5" />} label="All Issues" active={pathname === "/tickets"} collapsed={collapsed} />
             <NavItem href="/lead/workload" icon={<Users className="w-5 h-5" />} label="Workload" active={pathname.startsWith("/lead/workload")} collapsed={collapsed} />
@@ -324,6 +344,7 @@ export function AppSidebar() {
 
         {isLead && collapsed && (
           <>
+            <SectionLabel collapsed />
             <NavItem href="/dashboard" icon={<LayoutDashboard className="w-5 h-5" />} label="Dashboard" active={pathname === "/dashboard"} collapsed={collapsed} />
             <NavItem href="/tickets" icon={<Ticket className="w-5 h-5" />} label="Issues" active={pathname === "/tickets"} collapsed={collapsed} />
             <NavItem href="/lead/workload" icon={<Users className="w-5 h-5" />} label="Workload" active={pathname.startsWith("/lead/workload")} collapsed={collapsed} />
@@ -336,9 +357,7 @@ export function AppSidebar() {
         {/* THREESC_AGENT nav */}
         {isAgent && (
           <>
-            {!collapsed && <div className="px-3 pt-3 pb-1">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-300/60">Agent</p>
-            </div>}
+            <SectionLabel collapsed={collapsed}>Agent</SectionLabel>
             <NavItem href="/dashboard" icon={<LayoutDashboard className="w-5 h-5" />} label="Dashboard" active={pathname === "/dashboard"} collapsed={collapsed} />
             <NavItem href="/tickets" icon={<Ticket className="w-5 h-5" />} label="Issues" active={pathname === "/tickets"} collapsed={collapsed} />
             <NavItem href="/agent/kb" icon={<BookOpen className="w-5 h-5" />} label="Knowledge Base" active={pathname.startsWith("/agent/kb")} collapsed={collapsed} />
@@ -348,14 +367,19 @@ export function AppSidebar() {
         {/* THREESC_ADMIN-only admin nav */}
         {isAdmin && !collapsed && (
           <>
-            <div className="px-3 pt-3 pb-1">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-300/60">Admin</p>
-            </div>
+            <SectionLabel>Admin</SectionLabel>
             <NavItem
               href="/admin"
               icon={<ShieldCheck className="w-5 h-5" />}
               label="Dashboard"
               active={pathname === "/admin"}
+              collapsed={collapsed}
+            />
+            <NavItem
+              href="/tickets"
+              icon={<Ticket className="w-5 h-5" />}
+              label="Issues"
+              active={isTicketsActive}
               collapsed={collapsed}
             />
             <NavItem
@@ -419,7 +443,9 @@ export function AppSidebar() {
 
         {isAdmin && collapsed && (
           <>
+            <SectionLabel collapsed />
             <NavItem href="/admin" icon={<ShieldCheck className="w-5 h-5" />} label="Dashboard" active={pathname === "/admin"} collapsed={collapsed} />
+            <NavItem href="/tickets" icon={<Ticket className="w-5 h-5" />} label="Issues" active={isTicketsActive} collapsed={collapsed} />
             <NavItem href="/admin/customers" icon={<Building2 className="w-5 h-5" />} label="Workspaces" active={pathname.startsWith("/admin/customers")} collapsed={collapsed} />
             <NavItem href="/admin/users" icon={<Users className="w-5 h-5" />} label="Users" active={pathname.startsWith("/admin/users")} collapsed={collapsed} />
             <NavItem href="/admin/ai-config" icon={<Bot className="w-5 h-5" />} label="AI" active={pathname.startsWith("/admin/ai-config")} collapsed={collapsed} />
