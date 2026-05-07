@@ -29,8 +29,8 @@ export function TicketSuggestions({
 }: {
   query: string;
   onTicketSelect?: (ticketId: string) => void;
-  onItemClick?: (item: any, type: "article" | "ticket") => void;
-  onSuggestionsChange?: (suggestions: any[]) => void;
+  onItemClick?: (item: Suggestion, type: "article" | "ticket") => void;
+  onSuggestionsChange?: (suggestions: Suggestion[]) => void;
 }) {
   const router = useRouter();
   const [suggestions, setSuggestions] = useState<SuggestionsData>({
@@ -44,6 +44,7 @@ export function TicketSuggestions({
   useEffect(() => {
     if (!query || query.length < 5) {
       setSuggestions({ tickets: [], articles: [] });
+      onSuggestionsChange?.([]);
       return;
     }
 
@@ -74,7 +75,7 @@ export function TicketSuggestions({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query]);
+  }, [query, onSuggestionsChange]);
 
   const allSuggestions = [
     ...suggestions.tickets.map((t) => ({ ...t, type: "ticket" as const })),
@@ -143,8 +144,9 @@ export function TicketSuggestions({
                 Similar Resolved Tickets ({suggestions.tickets.length})
               </div>
               <div className="space-y-0.5 p-2">
-                {suggestions.tickets.map((ticket, idx) => (
+                {suggestions.tickets.map((ticket) => (
                   <button
+                    type="button"
                     key={ticket.id}
                     onClick={() => {
                       if (onItemClick) {
@@ -186,6 +188,7 @@ export function TicketSuggestions({
               <div className="space-y-0.5 p-2">
                 {suggestions.articles.map((article) => (
                   <button
+                    type="button"
                     key={article.id}
                     onClick={() => {
                       if (onItemClick) {

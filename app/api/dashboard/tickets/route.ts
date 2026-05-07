@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     }
     // THREESC_LEAD and THREESC_ADMIN see all tickets
 
-    const tickets = await prisma.issue.findMany({
+    const rawTickets = await prisma.issue.findMany({
       where,
       orderBy: { updatedAt: "desc" },
       select: {
@@ -64,9 +64,15 @@ export async function GET(request: NextRequest) {
         raisedBy: { select: { id: true, name: true } },
         assignedTo: { select: { id: true, name: true } },
         client: { select: { id: true, name: true } },
+        _count: { select: { comments: { where: { isInternal: false } } } },
       },
       take: 200,
     });
+
+    const tickets = rawTickets.map(({ _count, ...t }) => ({
+      ...t,
+      hasResponse: _count.comments > 0,
+    }));
 
     const response = NextResponse.json({ tickets });
     // Disable caching to ensure real-time updates

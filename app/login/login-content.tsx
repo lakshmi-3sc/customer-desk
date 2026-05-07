@@ -1,7 +1,7 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,22 +12,15 @@ import { AlertCircle, Loader2, Ticket, Shield, Zap, BarChart3 } from "lucide-rea
 export default function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const errorParam = searchParams.get("error");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(() => {
+    if (errorParam === "CredentialsSignin") return "Invalid email or password";
+    if (errorParam) return "Login failed. Please try again.";
+    return "";
+  });
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    // Check for error parameter in URL
-    const errorParam = searchParams.get("error");
-    if (errorParam) {
-      if (errorParam === "CredentialsSignin") {
-        setError("Invalid email or password");
-      } else {
-        setError("Login failed. Please try again.");
-      }
-    }
-  }, [searchParams]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -57,8 +50,8 @@ export default function LoginContent() {
     const session = await fetch("/api/auth/session").then((r) => r.json());
     console.log("Session data:", session);
 
-    // Redirect to unified dashboard - role-based view will be handled there
-    router.push("/dashboard");
+    const callbackUrl = searchParams.get("callbackUrl");
+    router.push(callbackUrl?.startsWith("/") ? callbackUrl : "/dashboard");
   }
 
   return (

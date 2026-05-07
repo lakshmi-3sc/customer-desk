@@ -23,7 +23,6 @@ import {
   ShieldAlert,
   PanelLeftClose,
   PanelLeftOpen,
-  ChevronRight,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -109,7 +108,6 @@ export function AppSidebar() {
       return false;
     }
   });
-  const [ticketsOpen, setTicketsOpen] = useState(true);
 
   // Save sidebar state to localStorage
   const toggleSidebar = () => {
@@ -133,7 +131,7 @@ export function AppSidebar() {
     pathname === "/tickets" || isTicketDetail;
 
   const isClientWorkspace = !is3SCTeam;
-  const sidebarColor = isClientWorkspace ? currentWorkspace?.primaryColor || "#0052CC" : "#0052CC";
+  const sidebarColor = "#0052CC";
   const portalName = isClientWorkspace ? currentWorkspace?.name || "3SC Connect" : "3SC Connect";
   const portalSubtitle = isClientWorkspace ? "Workspace" : isAdmin ? "Admin Portal" : isLead ? "Lead Portal" : isAgent ? "Agent Portal" : "Portal";
   const portalInitials = isClientWorkspace ? currentWorkspace?.name.substring(0, 2).toUpperCase() || "3S" : "3S";
@@ -231,41 +229,7 @@ export function AppSidebar() {
           />
         )}
 
-        {/* Tickets Accordion */}
-        {!is3SCTeam && !collapsed && (
-          <div>
-            <button
-              onClick={() => setTicketsOpen(!ticketsOpen)}
-              className={cn(
-                "flex items-center justify-between w-full px-3 py-2 rounded-md text-sm font-medium transition-all duration-150",
-                isTicketsActive
-                  ? "bg-white/20 text-white shadow-sm"
-                  : "text-blue-100 hover:bg-white/10 hover:text-white"
-              )}
-            >
-              <div className="flex items-center gap-2.5">
-                <Ticket className={cn("w-5 h-5 flex-shrink-0", isTicketsActive ? "text-white" : "text-blue-100/80")} />
-                <span>Issues</span>
-              </div>
-              <ChevronRight className={cn("w-3 h-3 transition-transform", ticketsOpen && "rotate-90")} />
-            </button>
-
-            {ticketsOpen && (
-              <div className="mt-0.5 space-y-0.5">
-                <NavItem
-                  href="/tickets"
-                  icon={<div className="w-1.5 h-1.5 rounded-full bg-current" />}
-                  label={is3SCTeam ? "All Issues" : isClientUser ? "My Issues" : "All Tickets"}
-                  active={pathname === "/tickets"}
-                  indent
-                  collapsed={collapsed}
-                />
-              </div>
-            )}
-          </div>
-        )}
-
-        {!is3SCTeam && collapsed && (
+        {!is3SCTeam && (
           <NavItem
             href="/tickets"
             icon={<Ticket className="w-5 h-5" />}

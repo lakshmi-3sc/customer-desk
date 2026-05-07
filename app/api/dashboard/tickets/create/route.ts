@@ -2,10 +2,17 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { generateTicketKey } from "@/lib/ticket-key";
 import { classifyIssue } from "@/lib/ai/classify-issue";
 import { computeSimilarResolutions } from "@/lib/compute-similar-resolutions";
 import { calculateSLADeadline } from "@/lib/sla";
+
+interface CreateAttachmentInput {
+  name?: string;
+  size?: number;
+  type?: string;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -60,20 +67,39 @@ export async function POST(req: NextRequest) {
     }
 
     // Create the ticket
-    const ticketKey = await generateTicketKey(projectId);
-    const ticket = await prisma.issue.create({
-      data: {
-        title,
-        description,
-        priority: priority || "MEDIUM",
-        category: category || "GENERAL",
-        status: "OPEN",
-        raisedById: session.user.id,
-        clientId: clientMember.clientId,
-        projectId: projectId,
-        ticketKey,
-      },
-    });
+    let ticket = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const ticketKey = await generateTicketKey(projectId);
+      try {
+        ticket = await prisma.issue.create({
+          data: {
+            title,
+            description,
+            priority: priority || "MEDIUM",
+            category: category || "BUG",
+            status: "OPEN",
+            raisedById: session.user.id,
+            clientId: clientMember.clientId,
+            projectId: projectId,
+            ticketKey,
+          },
+        });
+        break;
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002" &&
+          attempt < 2
+        ) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    if (!ticket) {
+      throw new Error("Unable to create a unique ticket key");
+    }
 
     // Await AI classification so fields are ready when user lands on the ticket page
     try {
@@ -93,10 +119,12 @@ export async function POST(req: NextRequest) {
     // Save attachments if provided
     if (attachments && Array.isArray(attachments) && attachments.length > 0) {
       await prisma.issueAttachment.createMany({
-        data: attachments.map((att: any) => ({
+        data: (attachments as CreateAttachmentInput[])
+          .filter((att) => att.name)
+          .map((att) => ({
           issueId: ticket.id,
           uploadedBy: session.user.id,
-          fileName: att.name,
+          fileName: att.name!,
           fileUrl: `/api/attachments/${ticket.id}/${att.name}`, // Reference to file storage API
           fileSize: att.size,
           fileType: att.type || 'application/octet-stream',
@@ -121,7 +149,12 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("Error creating ticket:", error);
     return NextResponse.json(
-      { error: "Failed to create ticket" },
+      {
+        error: "Failed to create ticket",
+        detail: process.env.NODE_ENV !== "production"
+          ? String(error instanceof Error ? error.message : error)
+          : undefined,
+      },
       { status: 500 },
     );
   }

@@ -20,6 +20,25 @@ interface Attachment {
   file?: File;
 }
 
+interface ProjectOption {
+  id: string;
+  name: string;
+}
+
+interface SuggestionItem {
+  id: string;
+  type: "article" | "ticket";
+  title: string;
+  slug?: string;
+  content?: string;
+  description?: string;
+  category?: string;
+  status?: string;
+  resolvedAt?: string;
+  resolution?: string;
+  priority?: string;
+}
+
 export default function CreateTicketPage() {
   const router = useRouter();
   const { data: session } = useSession();
@@ -39,14 +58,14 @@ export default function CreateTicketPage() {
   const [category, setCategory] = useState("BUG");
   const [projectId, setProjectId] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [projects, setProjects] = useState<any[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<any>(null);
-  const [allSuggestions, setAllSuggestions] = useState<any[]>([]);
+  const [selectedItem, setSelectedItem] = useState<SuggestionItem | null>(null);
+  const [allSuggestions, setAllSuggestions] = useState<SuggestionItem[]>([]);
 
   // Clear error whenever suggestions appear
   useEffect(() => {
@@ -140,9 +159,10 @@ export default function CreateTicketPage() {
         setSuccess(`Issue created: ${data.ticketId ?? ""}`);
         router.push(`/tickets/${data.ticketId ?? ""}`);
       } else {
-        setError("Failed to create issue. Please try again.");
+        const data = await res.json().catch(() => null);
+        setError(data?.error || "Failed to create issue. Please try again.");
       }
-    } catch (err) {
+    } catch {
       setError("An unexpected error occurred.");
     } finally {
       setLoading(false);
@@ -212,13 +232,14 @@ export default function CreateTicketPage() {
               </p>
             </div>
 
-            {error && allSuggestions.length === 0 && !drawerOpen && (
+            {error && !drawerOpen && (
               <div className="flex items-start gap-3 p-4 mb-5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-lg">
                 <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setError("")}
                   className="flex-shrink-0 text-red-400 hover:text-red-600 dark:hover:text-red-300"
                 >

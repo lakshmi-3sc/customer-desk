@@ -236,8 +236,12 @@ export default function InternalDashboard() {
               {kpiLoading
                 ? Array.from({ length: 4 }).map((_, i) => (
                     <div key={i} className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 border-l-4 border-l-slate-200 dark:border-l-slate-700 p-4 animate-pulse">
-                      <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-24 mb-3" />
-                      <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded w-16" />
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-24" />
+                        <div className="h-4 w-4 bg-slate-200 dark:bg-slate-700 rounded" />
+                      </div>
+                      <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded w-14 mb-1.5" />
+                      <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-20" />
                     </div>
                   ))
                 : metrics?.map((m, i) => {

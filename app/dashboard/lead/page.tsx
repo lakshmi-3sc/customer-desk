@@ -67,7 +67,14 @@ export default function LeadDashboard() {
           {/* KPI Cards */}
           <div className="grid grid-cols-4 gap-4">
             {loading ? [...Array(4)].map((_, i) => (
-              <div key={i} className="h-24 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 animate-pulse" />
+              <div key={i} className="bg-white dark:bg-slate-900 rounded-xl border-l-4 border-l-slate-200 dark:border-l-slate-700 border border-slate-200 dark:border-slate-800 p-4 animate-pulse">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-24" />
+                  <div className="h-4 w-4 bg-slate-200 dark:bg-slate-700 rounded" />
+                </div>
+                <div className="h-7 bg-slate-200 dark:bg-slate-700 rounded w-14 mb-1.5" />
+                <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-20" />
+              </div>
             )) : kpiCards.map(({ label, value, icon: Icon, color, bg, border, route }) => (
               <button key={label} onClick={() => route && router.push(route)} disabled={!route}
                 className={`${bg} p-4 rounded-xl border-l-4 ${border} border border-slate-200/50 dark:border-slate-800/50 text-left ${route ? "cursor-pointer hover:shadow-sm transition-shadow" : "cursor-default"}`}>

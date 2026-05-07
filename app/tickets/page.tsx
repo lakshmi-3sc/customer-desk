@@ -21,6 +21,7 @@ interface Ticket {
   slaBreached?: boolean;
   slaBreachRisk?: boolean;
   slaDueAt?: string | null;
+  hasResponse?: boolean;
   createdAt: string;
   updatedAt: string;
   project: { id: string; name: string } | null;
@@ -111,6 +112,7 @@ function TicketsContent() {
   const [filterUnassigned, setFilterUnassigned] = useState(false);
   const [filterSlaAtRisk, setFilterSlaAtRisk] = useState(false);
   const [filterSlaBreached, setFilterSlaBreached] = useState(false);
+  const [filterUnresponded, setFilterUnresponded] = useState(false);
 
   const statusParam = searchParams.get('status') || 'ALL';
   const searchQuery = searchParams.get('search') || '';
@@ -126,11 +128,12 @@ function TicketsContent() {
     if (unassigned === 'true') setFilterUnassigned(true);
     if (slaAtRisk === 'true') setFilterSlaAtRisk(true);
     if (slaBreached === 'true') setFilterSlaBreached(true);
+    if (searchParams.get('unresponded') === 'true') setFilterUnresponded(true);
   }, [searchParams]);
 
   const filteredTickets = tickets.filter((t) => {
     // When alert filters are active, only show active tickets (not resolved/closed)
-    const hasAlertFilter = !!(filterPriority || filterUnassigned || filterSlaAtRisk || filterSlaBreached);
+    const hasAlertFilter = !!(filterPriority || filterUnassigned || filterSlaAtRisk || filterSlaBreached || filterUnresponded);
     if (hasAlertFilter && ['RESOLVED', 'CLOSED'].includes(t.status)) return false;
     
     if (searchQuery && !(
@@ -152,10 +155,11 @@ function TicketsContent() {
     if (filterUnassigned && t.assignedTo?.id) return false;
     if (filterSlaAtRisk && !t.slaBreachRisk) return false;
     if (filterSlaBreached && !t.slaBreached) return false;
+    if (filterUnresponded && t.hasResponse) return false;
     return true;
   });
 
-  const hasActiveFilters = !!(filterPriority || filterCategory || filterClient || filterProject || filterDateFrom || filterDateTo || filterAgent || filterUnassigned || filterSlaAtRisk || filterSlaBreached);
+  const hasActiveFilters = !!(filterPriority || filterCategory || filterClient || filterProject || filterDateFrom || filterDateTo || filterAgent || filterUnassigned || filterSlaAtRisk || filterSlaBreached || filterUnresponded);
 
   const clearFilters = () => {
     setFilterPriority('');
@@ -168,6 +172,7 @@ function TicketsContent() {
     setFilterUnassigned(false);
     setFilterSlaAtRisk(false);
     setFilterSlaBreached(false);
+    setFilterUnresponded(false);
   };
 
   const handleBulkReassign = async () => {
@@ -481,15 +486,15 @@ function TicketsContent() {
 
             <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
               {/* Active alert filter indicator */}
-              {(filterPriority || filterUnassigned || filterSlaAtRisk || filterSlaBreached) && (
-                <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-800 bg-blue-50 dark:bg-blue-950/20">
-                  <p className="text-xs text-slate-600 dark:text-slate-300">
-                    Active filter: 
-                    {filterPriority && ` Priority: ${filterPriority}`}
-                    {filterUnassigned && ` Unassigned Issues`}
-                    {filterSlaAtRisk && ` SLA At-Risk`}
-                    {filterSlaBreached && ` SLA Breached`}
-                  </p>
+              {(filterPriority || filterUnassigned || filterSlaAtRisk || filterSlaBreached || filterUnresponded) && (
+                <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-800 bg-amber-50 dark:bg-amber-950/20 flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Filtered:</span>
+                  {filterPriority && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">Priority: {filterPriority}</span>}
+                  {filterUnassigned && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">Unassigned</span>}
+                  {filterSlaAtRisk && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">SLA At-Risk</span>}
+                  {filterSlaBreached && <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-medium">SLA Breached</span>}
+                  {filterUnresponded && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">Unresponded &gt;24h</span>}
+                  <button onClick={clearFilters} className="ml-auto text-xs text-slate-400 hover:text-red-500 transition-colors">Clear ×</button>
                 </div>
               )}
               

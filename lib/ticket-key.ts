@@ -26,10 +26,18 @@ export async function generateTicketKey(
     }
   }
 
-  // Count existing tickets with this prefix to derive the next number
-  const count = await prisma.issue.count({
-    where: { ticketKey: { startsWith: `${prefix}-` } },
+  const existingKeys = await prisma.issue.findMany({
+    where: {
+      ticketKey: { startsWith: `${prefix}-` },
+    },
+    select: { ticketKey: true },
   });
 
-  return `${prefix}-${1000 + count + 1}`;
+  const maxSuffix = existingKeys.reduce((max, issue) => {
+    const suffix = issue.ticketKey?.slice(prefix.length + 1) ?? "";
+    const value = Number.parseInt(suffix, 10);
+    return Number.isFinite(value) ? Math.max(max, value) : max;
+  }, 1000);
+
+  return `${prefix}-${maxSuffix + 1}`;
 }
