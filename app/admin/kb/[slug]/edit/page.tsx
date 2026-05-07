@@ -95,7 +95,7 @@ export default function EditArticlePage() {
     <div className="h-screen flex bg-background">
       <AppSidebar />
       <div className="flex-1 flex flex-col">
-        <TopBar />
+        <TopBar left={<span className="text-sm font-medium text-slate-700 dark:text-slate-300">Edit Article</span>} />
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-2xl mx-auto px-6 py-8">
             {/* Back button */}
