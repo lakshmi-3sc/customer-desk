@@ -10,10 +10,23 @@ import {
   AlertCircle,
   Users,
 } from "lucide-react";
-import { Summary } from "@prisma/client";
+import type { LucideIcon } from "lucide-react";
+import type { Summary } from "@prisma/client";
+
+interface SummaryMetrics {
+  totalOpen?: number;
+  resolved?: number;
+  slaBreaches?: number;
+}
+
+type InternalSummary = Summary & {
+  title?: string;
+  htmlContent?: string;
+  metrics?: SummaryMetrics;
+};
 
 interface InternalSummaryViewProps {
-  summaries?: Summary[];
+  summaries?: InternalSummary[];
   loading?: boolean;
 }
 
@@ -21,7 +34,7 @@ export function InternalSummaryView({
   summaries = [],
   loading = false,
 }: InternalSummaryViewProps) {
-  const [selectedSummary, setSelectedSummary] = useState<Summary | null>(null);
+  const [selectedSummary, setSelectedSummary] = useState<InternalSummary | null>(null);
   const [view, setView] = useState<"list" | "detail">("list");
 
   if (loading) {
@@ -51,7 +64,7 @@ export function InternalSummaryView({
           <div className="flex items-start justify-between mb-6">
             <div>
               <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">
-                {selectedSummary.title}
+                {selectedSummary.title ?? "Summary"}
               </h2>
               <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
                 <span className="flex items-center gap-1">
@@ -83,21 +96,17 @@ export function InternalSummaryView({
                 <>
                   <MetricCard
                     label="Total Open"
-                    value={
-                      (selectedSummary.metrics as any).totalOpen || "—"
-                    }
+                    value={selectedSummary.metrics.totalOpen || "-"}
                     icon={AlertCircle}
                   />
                   <MetricCard
                     label="Resolved"
-                    value={(selectedSummary.metrics as any).resolved || "—"}
+                    value={selectedSummary.metrics.resolved || "-"}
                     icon={TrendingUp}
                   />
                   <MetricCard
                     label="SLA Breaches"
-                    value={
-                      (selectedSummary.metrics as any).slaBreaches || "—"
-                    }
+                    value={selectedSummary.metrics.slaBreaches || "-"}
                     icon={AlertCircle}
                   />
                 </>
@@ -141,7 +150,7 @@ export function InternalSummaryView({
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-1">
-                  {summary.title}
+                  {summary.title ?? "Summary"}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   {format(new Date(summary.periodStart), "MMM dd, yyyy")}
@@ -169,8 +178,8 @@ function MetricCard({
   icon: Icon,
 }: {
   label: string;
-  value: any;
-  icon: any;
+  value: React.ReactNode;
+  icon: LucideIcon;
 }) {
   return (
     <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700">

@@ -81,7 +81,7 @@ function NavItem({ href, icon, label, active, indent, badge, collapsed }: NavIte
   );
 }
 
-function SectionLabel({ children, collapsed }: { children: React.ReactNode; collapsed?: boolean }) {
+function SectionLabel({ children, collapsed }: { children?: React.ReactNode; collapsed?: boolean }) {
   if (collapsed) {
     return <div className="mx-3 my-2 h-px bg-white/15" />;
   }

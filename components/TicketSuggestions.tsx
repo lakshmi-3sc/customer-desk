@@ -6,6 +6,7 @@ import { Lightbulb, Ticket, BookOpen, ChevronRight } from "lucide-react";
 
 interface Suggestion {
   id: string;
+  type: "ticket" | "article";
   title: string;
   status?: string;
   resolvedAt?: string;
@@ -13,7 +14,8 @@ interface Suggestion {
   slug?: string;
   content?: string;
   description?: string;
-  type?: "ticket" | "article";
+  resolution?: string;
+  priority?: string;
 }
 
 interface SuggestionsData {
@@ -39,7 +41,7 @@ export function TicketSuggestions({
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!query || query.length < 5) {

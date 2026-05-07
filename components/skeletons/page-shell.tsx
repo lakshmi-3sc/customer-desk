@@ -8,7 +8,7 @@ export function PageShell({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen bg-slate-50 dark:bg-slate-950 overflow-hidden">
       <AppSidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <TopBar />
+        <TopBar left={<Skeleton className="h-5 w-32" />} />
         <main className="flex-1 overflow-y-auto p-6">
           {children}
         </main>

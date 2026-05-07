@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
+import type { Prisma } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions);
 
     // Get published articles only
-    let where: any = { isPublished: true };
+    const where: Prisma.KnowledgeBaseWhereInput = { isPublished: true };
 
     const role = session?.user?.role || "";
     const is3SCTeam = ["THREESC_ADMIN", "THREESC_LEAD", "THREESC_AGENT"].includes(role);
@@ -22,10 +23,17 @@ export async function GET(request: NextRequest) {
     if (isClient) {
       where.isInternal = false;
       // Clients see only articles for their client or public articles
-      if (session?.user?.clientId) {
+      const membership = session?.user?.id
+        ? await prisma.clientMember.findFirst({
+          where: { userId: session.user.id },
+          select: { clientId: true },
+        })
+        : null;
+
+      if (membership?.clientId) {
         where.OR = [
           { clientId: null },
-          { clientId: session.user.clientId },
+          { clientId: membership.clientId },
         ];
       }
     }
@@ -43,16 +51,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ article });
     }
 
-    let query: any = { ...where };
+    const query: Prisma.KnowledgeBaseWhereInput = { ...where };
 
     if (category) {
       query.category = category;
     }
 
     if (q) {
-      query.OR = [
-        { title: { contains: q, mode: "insensitive" } },
-        { content: { contains: q, mode: "insensitive" } },
+      query.AND = [
+        ...(Array.isArray(query.AND) ? query.AND : query.AND ? [query.AND] : []),
+        {
+          OR: [
+            { title: { contains: q, mode: "insensitive" } },
+            { content: { contains: q, mode: "insensitive" } },
+          ],
+        },
       ];
     }
 

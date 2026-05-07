@@ -8,6 +8,15 @@ const SLA_DEFAULTS: Record<IssuePriority, { responseTime: number; resolutionTime
   LOW: { responseTime: 24, resolutionTime: 168 },
 };
 
+type SLAStatus = "breached" | "at-risk" | "healthy" | "no-sla";
+
+interface TimeRemaining {
+  hours: number;
+  minutes: number;
+  status: SLAStatus;
+  displayText: string;
+}
+
 export async function calculateSLADeadline(ticketId: string) {
   try {
     const ticket = await prisma.issue.findUnique({
@@ -71,7 +80,7 @@ export async function updateSLAStatus() {
   }
 }
 
-export function calculateTimeRemaining(slaDueAt: Date | null) {
+export function calculateTimeRemaining(slaDueAt: Date | null): TimeRemaining {
   if (!slaDueAt) return { hours: 0, minutes: 0, status: "no-sla", displayText: "No SLA" };
 
   const now = new Date();

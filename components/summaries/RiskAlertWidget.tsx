@@ -2,7 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { AlertTriangle, TrendingDown, Clock } from "lucide-react";
-import { Summary } from "@prisma/client";
+import type { Summary } from "@prisma/client";
+
+interface SummaryMetrics {
+  slaBreaches?: number;
+  escalations?: number;
+  totalOpen?: number;
+}
+
+type RiskSummary = Summary & {
+  metrics?: SummaryMetrics;
+};
 
 interface RiskAlertWidgetProps {
   limit?: number;
@@ -35,8 +45,8 @@ export function RiskAlertWidget({ limit = 5 }: RiskAlertWidgetProps) {
         // Extract risks from summaries
         const risks: RiskAlert[] = [];
 
-        summaries.forEach((summary: Summary) => {
-          const metrics = summary.metrics as any;
+        (summaries as RiskSummary[]).forEach((summary) => {
+          const metrics = summary.metrics;
 
           if (metrics?.slaBreaches && metrics.slaBreaches > 0) {
             risks.push({

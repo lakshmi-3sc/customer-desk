@@ -2,8 +2,22 @@
 
 import { useState, useEffect } from "react";
 import { TrendingUp, AlertCircle, Calendar } from "lucide-react";
-import { Summary } from "@prisma/client";
+import type { Summary } from "@prisma/client";
 import { format } from "date-fns";
+
+interface ProjectSummaryMetrics {
+  slaStatus?: string;
+  totalSubmitted?: number;
+  resolved?: number;
+  completionRate?: number;
+  openIssues?: number;
+  issuesByCategory?: { category: string; count: number }[];
+  recentlyResolved?: { id: string; title: string; resolvedAt: string | Date }[];
+}
+
+type ProjectSummary = Summary & {
+  metrics?: ProjectSummaryMetrics;
+};
 
 interface ProjectSummarySectionProps {
   projectId: string;
@@ -14,7 +28,7 @@ export function ProjectSummarySection({
   projectId,
   clientId,
 }: ProjectSummarySectionProps) {
-  const [summary, setSummary] = useState<Summary | null>(null);
+  const [summary, setSummary] = useState<ProjectSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -57,7 +71,7 @@ export function ProjectSummarySection({
     );
   }
 
-  const metrics = summary.metrics as any;
+  const metrics = summary.metrics;
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-6">
@@ -156,7 +170,7 @@ export function ProjectSummarySection({
             Issues by Category
           </h4>
           <div className="space-y-2">
-            {metrics.issuesByCategory.map((cat: any) => (
+            {metrics.issuesByCategory.map((cat) => (
               <div
                 key={cat.category}
                 className="flex items-center justify-between"
@@ -170,7 +184,7 @@ export function ProjectSummarySection({
                       className="h-full bg-blue-500"
                       style={{
                         width: `${
-                          (cat.count / metrics.totalSubmitted) * 100
+                          (cat.count / (metrics.totalSubmitted || 1)) * 100
                         }%`,
                       }}
                     />
@@ -192,7 +206,7 @@ export function ProjectSummarySection({
             Recently Resolved Issues
           </h4>
           <div className="space-y-2 max-h-40 overflow-y-auto">
-            {metrics.recentlyResolved.map((issue: any) => (
+            {metrics.recentlyResolved.map((issue) => (
               <div
                 key={issue.id}
                 className="p-2 rounded border border-slate-200 dark:border-slate-700 flex items-start gap-2"

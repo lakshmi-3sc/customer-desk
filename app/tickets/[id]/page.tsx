@@ -5,6 +5,12 @@ import { resolveTicketId } from "@/lib/resolve-ticket";
 import { notFound } from "next/navigation";
 import TicketDetail from "./TicketDetail";
 
+type Jsonified<T> =
+  T extends Date ? string :
+  T extends Array<infer U> ? Jsonified<U>[] :
+  T extends object ? { [K in keyof T]: Jsonified<T[K]> } :
+  T;
+
 export default async function TicketDetailPage({
   params,
 }: {
@@ -64,8 +70,8 @@ export default async function TicketDetailPage({
   // Serialize: convert Date objects → ISO strings so client component receives
   // plain JSON (Prisma returns Date, client Ticket interface expects string)
   const serialized = JSON.parse(JSON.stringify({ ticket, comments: roots })) as {
-    ticket: typeof ticket;
-    comments: typeof roots;
+    ticket: Jsonified<NonNullable<typeof ticket>>;
+    comments: Jsonified<typeof roots>;
   };
 
   return (

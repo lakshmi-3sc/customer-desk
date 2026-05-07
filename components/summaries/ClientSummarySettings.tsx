@@ -2,7 +2,18 @@
 
 import { useState, useEffect } from "react";
 import { Save, X } from "lucide-react";
-import { ClientSummaryPreference } from "@prisma/client";
+
+interface ClientSummaryPreference {
+  clientId: string;
+  summaryEnabled: boolean;
+  weeklyEnabled: boolean;
+  monthlyEnabled: boolean;
+  emailRecipients: string[];
+  includeResolvedIssues: boolean;
+  includeOpenIssues: boolean;
+  includeSLAMetrics: boolean;
+  includeCategoryBreakdown: boolean;
+}
 
 interface ClientSummarySettingsProps {
   clientId: string;

@@ -380,8 +380,8 @@ export default function AdminDashboard() {
               {loading ? (
                 <div className="h-36 animate-pulse bg-slate-100 dark:bg-slate-800 rounded" />
               ) : (() => {
-                const totalCreated = chartData.reduce((s: number, d: any) => s + (d.created ?? 0), 0);
-                const totalResolved = chartData.reduce((s: number, d: any) => s + (d.resolved ?? 0), 0);
+                const totalCreated = chartData.reduce((sum, day) => sum + (day.created ?? 0), 0);
+                const totalResolved = chartData.reduce((sum, day) => sum + (day.resolved ?? 0), 0);
                 const net = totalCreated - totalResolved;
                 const falling = net > 0;
                 return (
@@ -427,7 +427,7 @@ export default function AdminDashboard() {
                           interval={Math.floor(chartData.length / 5)} />
                         <YAxis hide allowDecimals={false} />
                         <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8, padding: '4px 10px' }}
-                          formatter={(v: any, n: string) => [v, n === "created" ? "Created" : "Resolved"]} />
+                          formatter={(value, name) => [value, name === "created" ? "Created" : "Resolved"]} />
                         <Area type="monotone" dataKey="created" stroke="#0052CC" strokeWidth={1.5} fill="url(#adminCreatedGrad)" dot={false} name="created" />
                         <Area type="monotone" dataKey="resolved" stroke="#10B981" strokeWidth={1.5} fill="url(#adminResolvedGrad)" dot={false} name="resolved" />
                       </ComposedChart>

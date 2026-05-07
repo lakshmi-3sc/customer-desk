@@ -3,6 +3,20 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
 
+function defaultPreferences(clientId: string, email?: string | null) {
+  return {
+    clientId,
+    summaryEnabled: true,
+    weeklyEnabled: true,
+    monthlyEnabled: true,
+    emailRecipients: email ? [email] : [],
+    includeResolvedIssues: true,
+    includeOpenIssues: true,
+    includeSLAMetrics: true,
+    includeCategoryBreakdown: true,
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -35,22 +49,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Get or create preferences
-    let preferences = await prisma.clientSummaryPreference.findUnique({
-      where: { clientId },
-    });
-
-    if (!preferences) {
-      preferences = await prisma.clientSummaryPreference.create({
-        data: {
-          clientId,
-          summaryEnabled: true,
-          weeklyEnabled: true,
-          monthlyEnabled: true,
-          emailRecipients: [session.user.email || ""],
-        },
-      });
-    }
+    const preferences = defaultPreferences(clientId, session.user.email);
 
     return NextResponse.json({ preferences });
   } catch (error) {
@@ -106,45 +105,18 @@ export async function PATCH(req: NextRequest) {
       includeCategoryBreakdown,
     } = body;
 
-    // Get or create preferences
-    let preferences = await prisma.clientSummaryPreference.findUnique({
-      where: { clientId },
-    });
-
-    if (!preferences) {
-      preferences = await prisma.clientSummaryPreference.create({
-        data: {
-          clientId,
-          summaryEnabled: summaryEnabled ?? true,
-          weeklyEnabled: weeklyEnabled ?? true,
-          monthlyEnabled: monthlyEnabled ?? true,
-          emailRecipients: emailRecipients ?? [session.user.email || ""],
-          includeResolvedIssues: includeResolvedIssues ?? true,
-          includeOpenIssues: includeOpenIssues ?? true,
-          includeSLAMetrics: includeSLAMetrics ?? true,
-          includeCategoryBreakdown: includeCategoryBreakdown ?? true,
-        },
-      });
-    } else {
-      preferences = await prisma.clientSummaryPreference.update({
-        where: { clientId },
-        data: {
-          ...(summaryEnabled !== undefined && { summaryEnabled }),
-          ...(weeklyEnabled !== undefined && { weeklyEnabled }),
-          ...(monthlyEnabled !== undefined && { monthlyEnabled }),
-          ...(emailRecipients && { emailRecipients }),
-          ...(includeResolvedIssues !== undefined && {
-            includeResolvedIssues,
-          }),
-          ...(includeOpenIssues !== undefined && { includeOpenIssues }),
-          ...(includeSLAMetrics !== undefined && { includeSLAMetrics }),
-          ...(includeCategoryBreakdown !== undefined && {
-            includeCategoryBreakdown,
-          }),
-          updatedAt: new Date(),
-        },
-      });
-    }
+    const preferences = {
+      ...defaultPreferences(clientId, session.user.email),
+      ...(summaryEnabled !== undefined && { summaryEnabled }),
+      ...(weeklyEnabled !== undefined && { weeklyEnabled }),
+      ...(monthlyEnabled !== undefined && { monthlyEnabled }),
+      ...(Array.isArray(emailRecipients) && { emailRecipients }),
+      ...(includeResolvedIssues !== undefined && { includeResolvedIssues }),
+      ...(includeOpenIssues !== undefined && { includeOpenIssues }),
+      ...(includeSLAMetrics !== undefined && { includeSLAMetrics }),
+      ...(includeCategoryBreakdown !== undefined && { includeCategoryBreakdown }),
+      updatedAt: new Date(),
+    };
 
     return NextResponse.json({ preferences });
   } catch (error) {

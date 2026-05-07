@@ -10,10 +10,24 @@ import {
   AlertCircle,
   TrendingUp,
 } from "lucide-react";
-import { Summary } from "@prisma/client";
+import type { Summary } from "@prisma/client";
+
+interface SummaryMetrics {
+  completionRate?: number;
+  slaStatus?: string;
+  totalSubmitted?: number;
+  resolved?: number;
+  openIssues?: number;
+}
+
+type ClientSummary = Summary & {
+  title?: string;
+  htmlContent?: string;
+  metrics?: SummaryMetrics;
+};
 
 interface ClientSummaryViewProps {
-  summaries?: Summary[];
+  summaries?: ClientSummary[];
   loading?: boolean;
 }
 
@@ -21,7 +35,7 @@ export function ClientSummaryView({
   summaries = [],
   loading = false,
 }: ClientSummaryViewProps) {
-  const [selectedSummary, setSelectedSummary] = useState<Summary | null>(null);
+  const [selectedSummary, setSelectedSummary] = useState<ClientSummary | null>(null);
   const [view, setView] = useState<"list" | "detail">("list");
 
   if (loading) {
@@ -38,7 +52,7 @@ export function ClientSummaryView({
   }
 
   if (view === "detail" && selectedSummary) {
-    const metrics = selectedSummary.metrics as any;
+    const metrics = selectedSummary.metrics;
     const completionRate = metrics?.completionRate || 0;
     const slaStatus = metrics?.slaStatus || "Checking...";
     const isSLAOk = !slaStatus.includes("Breach");
@@ -56,7 +70,7 @@ export function ClientSummaryView({
           <div className="flex items-start justify-between mb-6">
             <div>
               <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">
-                {selectedSummary.title}
+                {selectedSummary.title ?? "Summary"}
               </h2>
               <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
                 <span className="flex items-center gap-1">
@@ -150,7 +164,7 @@ export function ClientSummaryView({
         </div>
       ) : (
         summaries.map((summary) => {
-          const metrics = summary.metrics as any;
+          const metrics = summary.metrics;
           const completionRate = metrics?.completionRate || 0;
           const isSLAOk = !metrics?.slaStatus?.includes("Breach");
 
@@ -166,7 +180,7 @@ export function ClientSummaryView({
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">
-                    {summary.title}
+                    {summary.title ?? "Summary"}
                   </h3>
                   <div className="flex flex-wrap gap-3 text-sm text-slate-500 dark:text-slate-400">
                     <span className="flex items-center gap-1">
@@ -210,7 +224,7 @@ function MetricCard({
   highlight = false,
 }: {
   label: string;
-  value: any;
+  value: React.ReactNode;
   highlight?: boolean;
 }) {
   return (

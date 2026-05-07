@@ -16,6 +16,7 @@ interface Candidate {
   category?: string;
   status?: string;
   resolvedAt?: string;
+  resolution?: string;
 }
 
 async function getFullTextSearchResults(

@@ -8,6 +8,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import type { IssueCategory } from "@prisma/client";
 import bcrypt from "bcrypt";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -165,7 +166,7 @@ async function main() {
     project: string;
     title: string;
     description: string;
-    category: "BUG" | "FEATURE_REQUEST" | "TECHNICAL" | "GENERAL";
+    category: IssueCategory;
     priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
     status: "OPEN" | "ACKNOWLEDGED" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
     assignedTo?: "agent1" | "agent2";
@@ -198,7 +199,7 @@ async function main() {
       clientName: "Colgate-Palmolive", project: "Replenishment Planning",
       title: "Batch replenishment export to SAP S/4HANA timing out for >5000 SKUs",
       description: "The scheduled nightly export of replenishment orders to SAP S/4HANA is timing out when the SKU count exceeds 5,000 lines. The job runs for ~45 minutes and then aborts with a 504 gateway timeout, leaving SAP without updated replenishment data.\n\nImpact: Production lines in Baddi plant received incorrect material release quantities on 18 Apr 2026.",
-      category: "TECHNICAL", priority: "CRITICAL", status: "IN_PROGRESS", assignedTo: "agent1", escalated: true,
+      category: "PERFORMANCE", priority: "CRITICAL", status: "IN_PROGRESS", assignedTo: "agent1", escalated: true,
     },
 
     // ── COLGATE ── Production Planning ────────────────────────────────────
@@ -239,7 +240,7 @@ async function main() {
       clientName: "VIP Industries", project: "Replenishment Planning",
       title: "Planning engine performance degradation — 4x slower after March data migration",
       description: "Following the historical data migration in March 2026 (36 months of transaction history), the planning engine run time has increased from an average of 8 minutes to 34 minutes. No configuration changes were made.\n\nSuspect: missing index on the sku_transaction_history table post-migration. Please review and optimise query execution plan.",
-      category: "TECHNICAL", priority: "HIGH", status: "IN_PROGRESS", assignedTo: "agent2",
+      category: "PERFORMANCE", priority: "HIGH", status: "IN_PROGRESS", assignedTo: "agent2",
     },
 
     // ── VIP ── Production Planning ────────────────────────────────────────
@@ -293,7 +294,7 @@ async function main() {
       clientName: "BSV Pharma", project: "Production Planning",
       title: "API sync between SNP and PAS-X MES failing intermittently",
       description: "The real-time sync between the SNP Production Planning module and our PAS-X Manufacturing Execution System is failing with a 503 error approximately 3–4 times per day. Each failure creates a 15–45 minute gap in production execution data.\n\nError: `Connection pool exhausted — max 20 connections reached`.\n\nLast occurrence: 20 Apr 2026 14:32 IST.",
-      category: "TECHNICAL", priority: "HIGH", status: "IN_PROGRESS", assignedTo: "agent1",
+      category: "PERFORMANCE", priority: "HIGH", status: "IN_PROGRESS", assignedTo: "agent1",
     },
 
     // ── BSV ── Raw Material Planning ──────────────────────────────────────
@@ -363,7 +364,7 @@ async function main() {
       clientName: "Modenik Lifestyle", project: "Raw Material Planning",
       title: "Nightly material requirements planning (MRP) job failed — Jan–Mar 2026 data missing",
       description: "The nightly MRP batch job has been silently failing for the past 3 nights (18–20 Apr 2026). The job shows 'Completed' in the job scheduler but the material requirements output table has not been updated. Jan–Mar 2026 historical actuals are missing from MRP inputs.\n\nCritical — procurement team unable to generate POs for next month.",
-      category: "TECHNICAL", priority: "CRITICAL", status: "IN_PROGRESS", assignedTo: "agent1", escalated: true,
+      category: "PERFORMANCE", priority: "CRITICAL", status: "IN_PROGRESS", assignedTo: "agent1", escalated: true,
     },
   ];
 
