@@ -91,11 +91,11 @@ export default function AgentDashboard() {
   const firstName = session?.user?.name?.split(" ")[0] ?? null;
 
   const kpiCards = data ? [
-    { label: "Assigned to Me",  value: data.kpis.assigned,      icon: AlertCircle,  accent: "border-l-slate-400",   iconCls: "bg-slate-100 text-slate-500",         route: "/tickets" },
-    { label: "Overdue",         value: data.kpis.overdue,       icon: ShieldAlert,  accent: "border-l-red-500",     iconCls: "bg-red-50 text-red-500",              route: "/tickets?sla=overdue" },
-    { label: "Resolved Today",  value: data.kpis.resolvedToday, icon: CheckCircle,  accent: "border-l-emerald-400", iconCls: "bg-emerald-50 text-emerald-600",      route: null },
+    { label: "Assigned to Me",  value: data.kpis.assigned,      sub: "open tickets",       icon: AlertCircle,  accent: "border-l-slate-400",   iconCls: "bg-slate-100 text-slate-500",    route: "/tickets" },
+    { label: "Overdue",         value: data.kpis.overdue,       sub: "SLA breached",       icon: ShieldAlert,  accent: "border-l-red-500",     iconCls: "bg-red-50 text-red-500",         route: "/tickets?sla=overdue" },
+    { label: "Resolved Today",  value: data.kpis.resolvedToday, sub: "closed today",       icon: CheckCircle,  accent: "border-l-emerald-400", iconCls: "bg-emerald-50 text-emerald-600", route: null },
     { label: "Avg Response",    value: data.kpis.avgResponseHrs > 0 ? `${data.kpis.avgResponseHrs}h` : "—",
-                                                                 icon: TrendingUp,   accent: "border-l-blue-400",    iconCls: "bg-blue-50 text-blue-500",            route: null },
+                                                                 sub: "first response time", icon: TrendingUp,  accent: "border-l-blue-400",    iconCls: "bg-blue-50 text-blue-500",       route: null },
   ] : [];
 
   return (
@@ -122,9 +122,10 @@ export default function AgentDashboard() {
             {loading ? [...Array(4)].map((_, i) => (
               <div key={i} className="bg-white dark:bg-slate-900 rounded-xl border-l-[3px] border-l-slate-200 border border-slate-200 dark:border-slate-800 px-4 py-3 animate-pulse">
                 <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded w-24 mb-3" />
-                <div className="h-6 bg-slate-100 dark:bg-slate-800 rounded w-12" />
+                <div className="h-6 bg-slate-100 dark:bg-slate-800 rounded w-12 mb-2" />
+                <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded w-20" />
               </div>
-            )) : kpiCards.map(({ label, value, icon: Icon, accent, iconCls, route }) => (
+            )) : kpiCards.map(({ label, value, sub, icon: Icon, accent, iconCls, route }) => (
               <button
                 key={label}
                 onClick={() => route && router.push(route)}
@@ -138,6 +139,7 @@ export default function AgentDashboard() {
                   </div>
                 </div>
                 <p className="text-[22px] font-bold tabular-nums text-slate-900 dark:text-slate-50 leading-none">{value}</p>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">{sub}</p>
               </button>
             ))}
           </div>

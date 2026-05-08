@@ -27,6 +27,7 @@ const PRIORITY_BAR_COLOR: Record<string, string> = {
 interface KpiCard {
   label: string;
   value: string | number;
+  sub: string;
   icon: LucideIcon;
   accent: string;
   iconCls: string;
@@ -49,10 +50,10 @@ export default function LeadDashboard() {
   useEffect(() => { load(); }, []);
 
   const kpiCards: KpiCard[] = data ? [
-    { label: "Open Issues",     value: data.kpis.totalOpen,          icon: AlertCircle, accent: "border-l-slate-400",   iconCls: "bg-slate-100 text-slate-500",       route: "/tickets" },
-    { label: "SLA Breaches",    value: data.kpis.slaBreaches,        icon: ShieldAlert, accent: "border-l-red-500",     iconCls: "bg-red-50 text-red-500",            route: "/tickets?sla=breached" },
-    { label: "Avg Resolution",  value: `${data.kpis.avgResolutionHrs}h`, icon: Clock,  accent: "border-l-blue-400",    iconCls: "bg-blue-50 text-blue-500",          route: null },
-    { label: "CSAT Score",      value: `${data.kpis.csatScore}%`,    icon: TrendingUp,  accent: "border-l-emerald-400", iconCls: "bg-emerald-50 text-emerald-600",    route: "/lead/reports" },
+    { label: "Open Issues",     value: data.kpis.totalOpen,          sub: "across all agents", icon: AlertCircle, accent: "border-l-slate-400",   iconCls: "bg-slate-100 text-slate-500",    route: "/tickets" },
+    { label: "SLA Breaches",    value: data.kpis.slaBreaches,        sub: "needs escalation",  icon: ShieldAlert, accent: "border-l-red-500",     iconCls: "bg-red-50 text-red-500",         route: "/tickets?sla=breached" },
+    { label: "Avg Resolution",  value: `${data.kpis.avgResolutionHrs}h`, sub: "per ticket",   icon: Clock,       accent: "border-l-blue-400",    iconCls: "bg-blue-50 text-blue-500",       route: null },
+    { label: "CSAT Score",      value: `${data.kpis.csatScore}%`,    sub: "customer satisfaction", icon: TrendingUp, accent: "border-l-emerald-400", iconCls: "bg-emerald-50 text-emerald-600", route: "/lead/reports" },
   ] : [];
 
   return (
@@ -75,9 +76,10 @@ export default function LeadDashboard() {
             {loading ? [...Array(4)].map((_, i) => (
               <div key={i} className="bg-white dark:bg-slate-900 rounded-xl border-l-[3px] border-l-slate-200 border border-slate-200 dark:border-slate-800 px-4 py-3 animate-pulse">
                 <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded w-24 mb-3" />
-                <div className="h-6 bg-slate-100 dark:bg-slate-800 rounded w-12" />
+                <div className="h-6 bg-slate-100 dark:bg-slate-800 rounded w-12 mb-2" />
+                <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded w-20" />
               </div>
-            )) : kpiCards.map(({ label, value, icon: Icon, accent, iconCls, route }) => (
+            )) : kpiCards.map(({ label, value, sub, icon: Icon, accent, iconCls, route }) => (
               <button
                 key={label}
                 onClick={() => route && router.push(route)}
@@ -91,6 +93,7 @@ export default function LeadDashboard() {
                   </div>
                 </div>
                 <p className="text-[22px] font-bold tabular-nums text-slate-900 dark:text-slate-50 leading-none">{value}</p>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">{sub}</p>
               </button>
             ))}
           </div>

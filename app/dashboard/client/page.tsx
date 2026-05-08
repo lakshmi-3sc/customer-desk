@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-  AlertCircle, CheckCircle, Clock, ArrowUpRight, RefreshCw,
+  AlertCircle, CheckCircle, Clock, ArrowUpRight,
   Plus, Activity, ShieldAlert, ShieldCheck, AlertTriangle,
   Users, BarChart3, Flame, Timer, TrendingUp,
 } from "lucide-react";
@@ -63,12 +63,8 @@ export default function ClientDashboard() {
   const [reportsData, setReportsData] = useState<any>(null);
   const [activity, setActivity] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
-
   const fetchAll = async () => {
-    setRefreshing(true);
     await Promise.all([fetchKPI(), fetchTickets(), fetchReports(), fetchActivity(), fetchUsers()]);
-    setRefreshing(false);
   };
 
   const fetchKPI = async () => {
@@ -181,11 +177,11 @@ export default function ClientDashboard() {
   const activeUsers = Object.values(userTicketMap).sort((a, b) => b.open - a.open).slice(0, 6);
 
   const kpis = [
-    { label: "Open Tickets",   value: openTickets,   icon: AlertCircle, accent: "border-l-slate-400",   iconCls: "bg-slate-100 text-slate-500",       route: "/tickets?status=OPEN" },
-    { label: "Critical",       value: criticalCount,  icon: Flame,       accent: "border-l-red-500",     iconCls: "bg-red-50 text-red-500",            route: "/tickets?priority=CRITICAL" },
-    { label: "Resolved",       value: resolvedCount,  icon: CheckCircle, accent: "border-l-emerald-400", iconCls: "bg-emerald-50 text-emerald-600",    route: "/tickets?status=RESOLVED" },
-    { label: "SLA Compliance", value: `${slaCompliance}%`, icon: ShieldCheck, accent: "border-l-blue-400", iconCls: "bg-blue-50 text-blue-500",       route: null },
-    { label: "Avg Resolution", value: avgResolutionDays > 0 ? `${avgResolutionDays}d` : "—", icon: Timer, accent: "border-l-slate-400", iconCls: "bg-slate-100 text-slate-500", route: null },
+    { label: "Open Tickets",   value: openTickets,   sub: "active issues",        icon: AlertCircle, accent: "border-l-slate-400",   iconCls: "bg-slate-100 text-slate-500",    route: "/tickets?status=OPEN" },
+    { label: "Critical",       value: criticalCount,  sub: "needs immediate action", icon: Flame,    accent: "border-l-red-500",     iconCls: "bg-red-50 text-red-500",         route: "/tickets?priority=CRITICAL" },
+    { label: "Resolved",       value: resolvedCount,  sub: "all time",             icon: CheckCircle, accent: "border-l-emerald-400", iconCls: "bg-emerald-50 text-emerald-600", route: "/tickets?status=RESOLVED" },
+    { label: "SLA Compliance", value: `${slaCompliance}%`, sub: "on-time resolution", icon: ShieldCheck, accent: "border-l-blue-400", iconCls: "bg-blue-50 text-blue-500",    route: null },
+    { label: "Avg Resolution", value: avgResolutionDays > 0 ? `${avgResolutionDays}d` : "—", sub: "per ticket", icon: Timer, accent: "border-l-slate-400", iconCls: "bg-slate-100 text-slate-500", route: null },
   ];
 
   return (
@@ -201,23 +197,7 @@ export default function ClientDashboard() {
               <p className="text-xs text-slate-500 dark:text-slate-400">Client Overview</p>
             </div>
           }
-          right={
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => router.push("/create-ticket")}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#0052CC] hover:bg-[#0747A6] text-white rounded-md transition-colors font-medium"
-              >
-                <Plus className="w-3.5 h-3.5" /> New Ticket
-              </button>
-              <button
-                onClick={fetchAll}
-                disabled={refreshing}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 transition-colors"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} /> Refresh
-              </button>
-            </div>
-          }
+          right={null}
         />
 
         <main className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
@@ -227,7 +207,8 @@ export default function ClientDashboard() {
             {kpiLoading ? [...Array(5)].map((_, i) => (
               <div key={i} className="bg-white dark:bg-slate-900 rounded-xl border-l-[3px] border-l-slate-200 border border-slate-200 dark:border-slate-800 px-4 py-3 animate-pulse">
                 <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded w-24 mb-3" />
-                <div className="h-6 bg-slate-100 dark:bg-slate-800 rounded w-12" />
+                <div className="h-6 bg-slate-100 dark:bg-slate-800 rounded w-12 mb-2" />
+                <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded w-20" />
               </div>
             )) : kpis.map((kpi, i) => {
               const Icon = kpi.icon;
@@ -242,6 +223,7 @@ export default function ClientDashboard() {
                     <div className={`p-1 rounded-md ${kpi.iconCls}`}><Icon className="w-3 h-3" /></div>
                   </div>
                   <p className="text-[22px] font-bold tabular-nums text-slate-900 dark:text-slate-50 leading-none">{kpi.value}</p>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">{kpi.sub}</p>
                 </button>
               );
             })}

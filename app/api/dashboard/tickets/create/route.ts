@@ -7,6 +7,8 @@ import { generateTicketKey } from "@/lib/ticket-key";
 import { classifyIssue } from "@/lib/ai/classify-issue";
 import { computeSimilarResolutions } from "@/lib/compute-similar-resolutions";
 import { calculateSLADeadline } from "@/lib/sla";
+import { sendEmail } from "@/lib/email";
+import { ticketCreatedEmail } from "@/lib/email-templates";
 
 interface CreateAttachmentInput {
   name?: string;
@@ -138,6 +140,18 @@ export async function POST(req: NextRequest) {
     // Compute similar resolutions in background
     computeSimilarResolutions(ticket.id).catch(e => console.error("Similar resolutions failed:", e));
 
+    // Notify all 3SC agents/leads/admins about the new ticket (background)
+    notifyInternalTeamOfNewTicket({
+      ticketKey: ticket.ticketKey ?? ticket.id,
+      ticketId: ticket.id,
+      title: ticket.title,
+      priority: ticket.priority,
+      category: ticket.category,
+      projectName: project.name,
+      raisedByName: session.user.name ?? session.user.email ?? "Customer",
+      clientId: clientMember.clientId,
+    }).catch(e => console.error("New ticket email failed:", e));
+
     return NextResponse.json(
       {
         success: true,
@@ -158,4 +172,43 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+async function notifyInternalTeamOfNewTicket(params: {
+  ticketKey: string;
+  ticketId: string;
+  title: string;
+  priority: string;
+  category: string;
+  projectName: string;
+  raisedByName: string;
+  clientId: string;
+}) {
+  const client = await prisma.client.findUnique({
+    where: { id: params.clientId },
+    select: { name: true },
+  });
+
+  const template = ticketCreatedEmail({
+    ticketKey: params.ticketKey,
+    ticketId: params.ticketId,
+    title: params.title,
+    priority: params.priority,
+    category: params.category,
+    project: params.projectName,
+    raisedBy: params.raisedByName,
+    clientName: client?.name ?? params.clientId,
+  });
+
+  const internalUsers = await prisma.user.findMany({
+    where: {
+      role: { in: ["THREESC_ADMIN", "THREESC_LEAD", "THREESC_AGENT"] },
+      isActive: true,
+    },
+    select: { email: true },
+  });
+
+  await Promise.all(
+    internalUsers.map((u) => sendEmail({ to: u.email, ...template }))
+  );
 }

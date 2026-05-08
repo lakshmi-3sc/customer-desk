@@ -4,6 +4,7 @@ import { authOptions } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { resolveTicketId } from "@/lib/resolve-ticket";
 import { createNotification, getStatusChangeRecipients } from "@/lib/notifications";
+import type { EmailContext } from "@/lib/notifications";
 import type { Server } from "socket.io";
 import type { IssuePriority } from "@prisma/client";
 
@@ -161,6 +162,16 @@ export async function PUT(
       },
     });
 
+    // Build shared email context
+    const baseCtx: EmailContext = {
+      ticketKey: updatedTicket.ticketKey ?? "",
+      ticketId: id,
+      ticketTitle: updatedTicket.title,
+      ticketPriority: updatedTicket.priority,
+      actorName: currentUser.name,
+      clientName: updatedTicket.project?.name ?? "",
+    };
+
     // Create notifications for assignment changes
     if (assignedToId !== undefined && assignedToId !== ticket.assignedToId) {
       if (assignedToId !== null) {
@@ -169,7 +180,8 @@ export async function PUT(
           "ISSUE_ASSIGNED",
           `${currentUser.name} assigned this to you`,
           `${updatedTicket.title} - ${updatedTicket.category}`,
-          id
+          id,
+          baseCtx,
         );
       }
     }
@@ -177,13 +189,19 @@ export async function PUT(
     // Create notifications for status changes
     if (status !== undefined && status !== ticket.status) {
       const recipients = await getStatusChangeRecipients(id, currentUser.id);
+      const statusCtx: EmailContext = {
+        ...baseCtx,
+        fromStatus: ticket.status,
+        toStatus: status,
+      };
       for (const recipientId of recipients) {
         await createNotification(
           recipientId,
           "STATUS_UPDATED",
           `Status changed to ${status}`,
           `${updatedTicket.title} - ${ticket.status} → ${status}`,
-          id
+          id,
+          statusCtx,
         );
       }
     }
