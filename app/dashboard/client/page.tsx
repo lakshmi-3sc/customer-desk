@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -181,15 +181,15 @@ export default function ClientDashboard() {
   const activeUsers = Object.values(userTicketMap).sort((a, b) => b.open - a.open).slice(0, 6);
 
   const kpis = [
-    { label: "Open Tickets", value: openTickets, icon: AlertCircle, color: "border-l-red-500", textColor: "text-red-600", route: "/tickets?status=OPEN" },
-    { label: "Critical", value: criticalCount, icon: Flame, color: "border-l-red-600", textColor: "text-red-700", route: "/tickets?priority=CRITICAL" },
-    { label: "Resolved", value: resolvedCount, icon: CheckCircle, color: "border-l-emerald-500", textColor: "text-emerald-600", route: "/tickets?status=RESOLVED" },
-    { label: "SLA Compliance", value: `${slaCompliance}%`, icon: ShieldCheck, color: "border-l-blue-500", textColor: "text-blue-600", route: null },
-    { label: "Avg Resolution", value: avgResolutionDays > 0 ? `${avgResolutionDays}d` : "—", icon: Timer, color: "border-l-purple-500", textColor: "text-purple-600", route: null },
+    { label: "Open Tickets",   value: openTickets,   icon: AlertCircle, accent: "border-l-slate-400",   iconCls: "bg-slate-100 text-slate-500",       route: "/tickets?status=OPEN" },
+    { label: "Critical",       value: criticalCount,  icon: Flame,       accent: "border-l-red-500",     iconCls: "bg-red-50 text-red-500",            route: "/tickets?priority=CRITICAL" },
+    { label: "Resolved",       value: resolvedCount,  icon: CheckCircle, accent: "border-l-emerald-400", iconCls: "bg-emerald-50 text-emerald-600",    route: "/tickets?status=RESOLVED" },
+    { label: "SLA Compliance", value: `${slaCompliance}%`, icon: ShieldCheck, accent: "border-l-blue-400", iconCls: "bg-blue-50 text-blue-500",       route: null },
+    { label: "Avg Resolution", value: avgResolutionDays > 0 ? `${avgResolutionDays}d` : "—", icon: Timer, accent: "border-l-slate-400", iconCls: "bg-slate-100 text-slate-500", route: null },
   ];
 
   return (
-    <div className="h-screen w-screen flex overflow-hidden bg-[#F4F5F7] dark:bg-slate-950">
+    <div className="h-screen w-screen flex overflow-hidden bg-[#F8F9FB] dark:bg-slate-950">
       <AppSidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar
@@ -225,23 +225,24 @@ export default function ClientDashboard() {
           {/* KPI Row */}
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             {kpiLoading ? [...Array(5)].map((_, i) => (
-              <div key={i} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 border-l-4 border-l-slate-200 p-5 animate-pulse">
-                <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-24 mb-3" />
-                <div className="h-7 bg-slate-100 dark:bg-slate-800 rounded w-12" />
+              <div key={i} className="bg-white dark:bg-slate-900 rounded-xl border-l-[3px] border-l-slate-200 border border-slate-200 dark:border-slate-800 px-4 py-3 animate-pulse">
+                <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded w-24 mb-3" />
+                <div className="h-6 bg-slate-100 dark:bg-slate-800 rounded w-12" />
               </div>
             )) : kpis.map((kpi, i) => {
               const Icon = kpi.icon;
               return (
-                <div key={i}
+                <button key={i}
                   onClick={() => kpi.route && router.push(kpi.route)}
-                  className={`bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 border-l-4 ${kpi.color} p-5 ${kpi.route ? "cursor-pointer hover:shadow-md transition-shadow" : ""}`}
+                  disabled={!kpi.route}
+                  className={`bg-white dark:bg-slate-900 px-4 py-3 rounded-xl border-l-[3px] ${kpi.accent} border border-slate-200 dark:border-slate-800 shadow-sm text-left transition-all ${kpi.route ? "cursor-pointer hover:shadow-md" : "cursor-default"}`}
                 >
-                  <div className="flex items-start justify-between mb-2">
-                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{kpi.label}</p>
-                    <Icon className={`w-4 h-4 ${kpi.textColor} opacity-60`} />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{kpi.label}</p>
+                    <div className={`p-1 rounded-md ${kpi.iconCls}`}><Icon className="w-3 h-3" /></div>
                   </div>
-                  <p className={`text-2xl font-bold tabular-nums ${kpi.textColor}`}>{kpi.value}</p>
-                </div>
+                  <p className="text-[22px] font-bold tabular-nums text-slate-900 dark:text-slate-50 leading-none">{kpi.value}</p>
+                </button>
               );
             })}
           </div>

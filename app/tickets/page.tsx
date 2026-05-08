@@ -1,9 +1,8 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, CheckCircle, Clock, ChevronRight, Plus, Search, X, Filter, Download, SlidersHorizontal, ShieldAlert, Users } from 'lucide-react';
+import { CheckCircle, ChevronRight, Plus, Search, X, Download, ShieldAlert, Clock } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { AppSidebar } from '@/components/app-sidebar';
@@ -51,37 +50,41 @@ const STATUS_TABS = [
   { key: 'CLOSED', label: 'Closed' },
 ];
 
+const STATUS_MAP: Record<string, { label: string; cls: string }> = {
+  OPEN:         { label: 'Open',         cls: 'bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-300 ring-1 ring-red-200 dark:ring-red-800' },
+  IN_PROGRESS:  { label: 'In Progress',  cls: 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 ring-1 ring-amber-200 dark:ring-amber-800' },
+  RESOLVED:     { label: 'Resolved',     cls: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 ring-1 ring-emerald-200 dark:ring-emerald-800' },
+  ACKNOWLEDGED: { label: 'Acknowledged', cls: 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 ring-1 ring-purple-200 dark:ring-purple-800' },
+  CLOSED:       { label: 'Closed',       cls: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 ring-1 ring-slate-200 dark:ring-slate-700' },
+};
+
 function StatusLozenge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    OPEN: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300',
-    IN_PROGRESS: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
-    RESOLVED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-    ACKNOWLEDGED: 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300',
-    CLOSED: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
-  };
+  const s = STATUS_MAP[status] ?? STATUS_MAP.CLOSED;
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${map[status] ?? map.CLOSED}`}>
-      {status.replace('_', ' ')}
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${s.cls}`}>
+      {s.label}
     </span>
   );
 }
 
+const PRIORITY_MAP: Record<string, { cls: string; dot: string; label: string }> = {
+  CRITICAL: { cls: 'text-red-600 dark:text-red-400',       dot: 'bg-red-500',    label: 'Critical' },
+  HIGH:     { cls: 'text-orange-600 dark:text-orange-400', dot: 'bg-orange-500', label: 'High' },
+  MEDIUM:   { cls: 'text-yellow-600 dark:text-yellow-500', dot: 'bg-yellow-400', label: 'Medium' },
+  LOW:      { cls: 'text-blue-500 dark:text-blue-400',     dot: 'bg-blue-400',   label: 'Low' },
+};
+
 function PriorityBadge({ priority }: { priority: string }) {
-  const map: Record<string, { cls: string; dot: string }> = {
-    CRITICAL: { cls: 'text-red-600 dark:text-red-400', dot: 'bg-red-500' },
-    HIGH: { cls: 'text-orange-600 dark:text-orange-400', dot: 'bg-orange-500' },
-    MEDIUM: { cls: 'text-yellow-600 dark:text-yellow-400', dot: 'bg-yellow-400' },
-    LOW: { cls: 'text-blue-600 dark:text-blue-400', dot: 'bg-blue-400' },
-  };
-  const p = priority?.toUpperCase();
-  const style = map[p] ?? { cls: 'text-slate-500', dot: 'bg-slate-400' };
+  const p = PRIORITY_MAP[priority?.toUpperCase()] ?? { cls: 'text-slate-500', dot: 'bg-slate-400', label: priority };
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${style.cls}`}>
-      <span className={`w-2 h-2 rounded-full ${style.dot}`} />
-      {priority?.charAt(0) + priority?.slice(1).toLowerCase()}
+    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${p.cls}`}>
+      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${p.dot}`} />
+      {p.label}
     </span>
   );
 }
+
+const selectCls = 'text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC]/40 focus:border-[#0052CC] transition-colors min-w-max';
 
 function TicketsContent() {
   const router = useRouter();
@@ -96,34 +99,27 @@ function TicketsContent() {
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [projects, setProjects] = useState<any[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
-  const isClientUser = session?.user?.role === 'CLIENT_USER';
-  const isLead = session?.user?.role === 'THREESC_LEAD';
-  const is3SCTeam = ['THREESC_ADMIN', 'THREESC_LEAD', 'THREESC_AGENT'].includes(session?.user?.role ?? '');
-
-  const [filterAgent, setFilterAgent] = useState('');
-  const [filterClient, setFilterClient] = useState('');
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
-  const [showBulkReassign, setShowBulkReassign] = useState(false);
-  const [bulkAgent, setBulkAgent] = useState('');
-  const [bulkSaving, setBulkSaving] = useState(false);
+  const [filterAgent, setFilterAgent] = useState('');
+  const [filterClient, setFilterClient] = useState('');
   const [filterUnassigned, setFilterUnassigned] = useState(false);
   const [filterSlaAtRisk, setFilterSlaAtRisk] = useState(false);
   const [filterSlaBreached, setFilterSlaBreached] = useState(false);
   const [filterUnresponded, setFilterUnresponded] = useState(false);
 
+  const isClientUser = session?.user?.role === 'CLIENT_USER';
+  const isLead = session?.user?.role === 'THREESC_LEAD';
+  const is3SCTeam = ['THREESC_ADMIN', 'THREESC_LEAD', 'THREESC_AGENT'].includes(session?.user?.role ?? '');
+
   const statusParam = searchParams.get('status') || 'ALL';
   const searchQuery = searchParams.get('search') || '';
-  
-  // Parse alert query parameters and apply filters
+
   useEffect(() => {
     const priority = searchParams.get('priority');
     const unassigned = searchParams.get('unassigned');
     const slaAtRisk = searchParams.get('slaAtRisk');
     const slaBreached = searchParams.get('slaBreached');
-    
     if (priority) setFilterPriority(priority);
     if (unassigned === 'true') setFilterUnassigned(true);
     if (slaAtRisk === 'true') setFilterSlaAtRisk(true);
@@ -132,10 +128,8 @@ function TicketsContent() {
   }, [searchParams]);
 
   const filteredTickets = tickets.filter((t) => {
-    // When alert filters are active, only show active tickets (not resolved/closed)
     const hasAlertFilter = !!(filterPriority || filterUnassigned || filterSlaAtRisk || filterSlaBreached || filterUnresponded);
     if (hasAlertFilter && ['RESOLVED', 'CLOSED'].includes(t.status)) return false;
-    
     if (searchQuery && !(
       t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (t.ticketKey ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -162,54 +156,19 @@ function TicketsContent() {
   const hasActiveFilters = !!(filterPriority || filterCategory || filterClient || filterProject || filterDateFrom || filterDateTo || filterAgent || filterUnassigned || filterSlaAtRisk || filterSlaBreached || filterUnresponded);
 
   const clearFilters = () => {
-    setFilterPriority('');
-    setFilterCategory('');
-    setFilterClient('');
-    setFilterProject('');
-    setFilterDateFrom('');
-    setFilterDateTo('');
-    setFilterAgent('');
-    setFilterUnassigned(false);
-    setFilterSlaAtRisk(false);
-    setFilterSlaBreached(false);
-    setFilterUnresponded(false);
-  };
-
-  const handleBulkReassign = async () => {
-    if (!bulkAgent || selectedIds.size === 0) return;
-    setBulkSaving(true);
-    try {
-      await Promise.all([...selectedIds].map((id) =>
-        fetch(`/api/dashboard/tickets/${id}/update`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ assignedToId: bulkAgent }),
-        })
-      ));
-      setSelectedIds(new Set());
-      setShowBulkReassign(false);
-      setBulkAgent('');
-      // Refresh tickets
-      const params = new URLSearchParams();
-      if (activeTab !== 'ALL') params.append('status', activeTab);
-      const res = await fetch(`/api/dashboard/tickets?${params.toString()}`, { cache: 'no-store' });
-      const d = await res.json();
-      setTickets((d.tickets ?? []).sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()));
-    } catch {} finally { setBulkSaving(false); }
+    setFilterPriority(''); setFilterCategory(''); setFilterClient('');
+    setFilterProject(''); setFilterDateFrom(''); setFilterDateTo('');
+    setFilterAgent(''); setFilterUnassigned(false); setFilterSlaAtRisk(false);
+    setFilterSlaBreached(false); setFilterUnresponded(false);
   };
 
   const exportCSV = () => {
-    const toExport = selectedIds.size > 0
-      ? filteredTickets.filter((t) => selectedIds.has(t.id))
-      : filteredTickets;
     const rows = [
       ['Key', 'Title', 'Status', 'Priority', 'Project', 'Created'],
-      ...toExport.map((t) => [
-        t.ticketKey ?? t.id,
+      ...filteredTickets.map((t) => [
+        t.ticketKey ?? generateTicketKey(t.project, t.id),
         `"${t.title.replace(/"/g, '""')}"`,
-        t.status,
-        t.priority,
-        t.project?.name ?? '',
+        t.status, t.priority, t.project?.name ?? '',
         new Date(t.createdAt).toLocaleDateString(),
       ]),
     ];
@@ -223,22 +182,6 @@ function TicketsContent() {
     URL.revokeObjectURL(url);
   };
 
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedIds.size === filteredTickets.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredTickets.map((t) => t.id)));
-    }
-  };
-
   useEffect(() => {
     fetch('/api/dashboard/projects', { cache: 'no-store' })
       .then((r) => r.ok ? r.json() : { projects: [] })
@@ -246,7 +189,6 @@ function TicketsContent() {
       .catch(() => {});
   }, [is3SCTeam]);
 
-  // Load clients for 3SC team + agents for Lead filters
   useEffect(() => {
     if (is3SCTeam) {
       fetch('/api/admin/customers')
@@ -254,7 +196,6 @@ function TicketsContent() {
         .then((d) => setClients((d.clients ?? []).map((c: any) => ({ id: c.id, name: c.name }))))
         .catch(() => {});
     }
-
     if (!isLead) return;
     fetch('/api/dashboard/users')
       .then((r) => r.ok ? r.json() : [])
@@ -262,9 +203,7 @@ function TicketsContent() {
       .catch(() => {});
   }, [is3SCTeam, isLead]);
 
-  useEffect(() => {
-    setActiveTab(statusParam === 'ALL' ? 'ALL' : statusParam);
-  }, [statusParam]);
+  useEffect(() => { setActiveTab(statusParam === 'ALL' ? 'ALL' : statusParam); }, [statusParam]);
 
   useEffect(() => {
     const fetchTickets = async () => {
@@ -274,60 +213,44 @@ function TicketsContent() {
         if (activeTab !== 'ALL') params.append('status', activeTab);
         const res = await fetch(`/api/dashboard/tickets?${params.toString()}`, { cache: 'no-store' });
         const data = await res.json();
-        const sorted = (data.tickets || []).sort(
+        setTickets((data.tickets || []).sort(
           (a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-        );
-        setTickets(sorted);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
+        ));
+      } catch (e) { console.error(e); }
+      finally { setLoading(false); }
     };
     fetchTickets();
   }, [activeTab]);
 
-  // Real-time updates via Socket.IO
   useEffect(() => {
     const socket = getSocket();
-
     const joinRoom = () => socket.emit('join:tickets');
     if (socket.connected) joinRoom();
     socket.on('connect', joinRoom);
-
     socket.on('ticket:updated', (updated: Ticket) => {
       setTickets((prev) =>
         prev.some((t) => t.id === updated.id)
-          ? prev
-              .map((t) => (t.id === updated.id ? { ...t, ...updated } : t))
+          ? prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t))
               .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
           : prev
       );
     });
-    return () => {
-      socket.off('connect', joinRoom);
-      socket.off('ticket:updated');
-    };
+    return () => { socket.off('connect', joinRoom); socket.off('ticket:updated'); };
   }, []);
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
-    if (tab === 'ALL') {
-      router.push('/tickets');
-    } else {
-      router.push(`/tickets?status=${tab}`);
-    }
+    router.push(tab === 'ALL' ? '/tickets' : `/tickets?status=${tab}`);
   };
 
-  const formatDate = (date: string) =>
-    new Date(date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  const formatDateShort = (date: string) =>
+    new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
   return (
-    <div className="h-screen w-screen flex overflow-hidden bg-[#F4F5F7] dark:bg-slate-950">
+    <div className="h-screen w-screen flex overflow-hidden bg-[#F8F9FB] dark:bg-slate-950">
       <AppSidebar />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top bar */}
         <TopBar
           left={
             <div className="flex items-center gap-2 text-sm">
@@ -344,21 +267,31 @@ function TicketsContent() {
         />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Page heading */}
-          <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 pt-5 pb-0">
-            <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-4">
-              {isClientUser ? 'My Issues' : 'Issues'}
-            </h1>
-            {/* Status tabs */}
+          {/* Page header + tabs */}
+          <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 pt-4 pb-0">
+            <div className="flex items-center justify-between mb-3">
+              <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                {isClientUser ? 'My Issues' : 'Issues'}
+              </h1>
+              {isClientUser && (
+                <button
+                  onClick={() => router.push('/create-ticket')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[#0052CC] hover:bg-[#0747A6] text-white rounded-lg transition-colors shadow-sm"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  New Issue
+                </button>
+              )}
+            </div>
             <div className="flex gap-0 -mb-px">
               {STATUS_TABS.map((tab) => (
                 <button
                   key={tab.key}
                   onClick={() => handleTabChange(tab.key)}
-                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  className={`px-4 py-2 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
                     activeTab === tab.key
                       ? 'border-[#0052CC] text-[#0052CC] dark:text-blue-400 dark:border-blue-400'
-                      : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-600'
+                      : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:border-slate-300'
                   }`}
                 >
                   {tab.label}
@@ -367,339 +300,239 @@ function TicketsContent() {
             </div>
           </div>
 
-          {/* Tickets table */}
-          <main className="flex-1 overflow-y-auto p-6">
-
-            {/* Filter bar - wraps on multiple lines */}
-            <div className="flex flex-wrap items-center gap-1.5 mb-4 pb-2">
-              <select
-                value={filterPriority}
-                onChange={(e) => setFilterPriority(e.target.value)}
-                className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC] truncate min-w-max"
-              >
-                <option value="">Priorities</option>
+          <main className="flex-1 overflow-y-auto p-5">
+            {/* Filter bar */}
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} className={selectCls}>
+                <option value="">Priority</option>
                 <option value="CRITICAL">Critical</option>
                 <option value="HIGH">High</option>
                 <option value="MEDIUM">Medium</option>
                 <option value="LOW">Low</option>
               </select>
 
-              <select
-                value={filterCategory}
-                onChange={(e) => setFilterCategory(e.target.value)}
-                className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC] truncate min-w-max"
-              >
-                <option value="">Categories</option>
+              <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className={selectCls}>
+                <option value="">Category</option>
                 <option value="BUG">Bug</option>
                 <option value="FEATURE">Feature</option>
                 <option value="QUESTION">Question</option>
                 <option value="OTHER">Other</option>
               </select>
 
-              <select
-                value={filterClient}
-                onChange={(e) => {
-                  setFilterClient(e.target.value);
-                  setFilterProject('');
-                }}
-                className={`text-xs border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC] min-w-max ${!is3SCTeam ? 'hidden' : ''}`}
-                style={{ maxWidth: '140px' }}
-              >
-                <option value="">Clients</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name.length > 15 ? c.name.slice(0, 12) + '...' : c.name}</option>
-                ))}
-              </select>
+              {is3SCTeam && (
+                <select
+                  value={filterClient}
+                  onChange={(e) => { setFilterClient(e.target.value); setFilterProject(''); }}
+                  className={selectCls}
+                  style={{ maxWidth: '150px' }}
+                >
+                  <option value="">Client</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name.length > 18 ? c.name.slice(0, 15) + '…' : c.name}</option>
+                  ))}
+                </select>
+              )}
 
-              <select
-                value={filterProject}
-                onChange={(e) => setFilterProject(e.target.value)}
-                className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC] truncate min-w-max"
-              >
-                <option value="">Projects</option>
+              <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)} className={selectCls} style={{ maxWidth: '160px' }}>
+                <option value="">Project</option>
                 {projects
                   .filter((p) => !filterClient || p.clientId === filterClient)
                   .map((p) => (
-                    <option key={p.id} value={p.id}>{p.name.length > 20 ? p.name.slice(0, 17) + '...' : p.name}</option>
+                    <option key={p.id} value={p.id}>{p.name.length > 22 ? p.name.slice(0, 19) + '…' : p.name}</option>
                   ))}
               </select>
 
               {isLead && (
-                <select
-                  value={filterAgent}
-                  onChange={(e) => setFilterAgent(e.target.value)}
-                  className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC] truncate min-w-max"
-                >
-                  <option value="">Agents</option>
-                  {agents.map((a) => <option key={a.id} value={a.id}>{a.name.length > 15 ? a.name.slice(0, 12) + '...' : a.name}</option>)}
+                <select value={filterAgent} onChange={(e) => setFilterAgent(e.target.value)} className={selectCls}>
+                  <option value="">Agent</option>
+                  {agents.map((a) => <option key={a.id} value={a.id}>{a.name.length > 15 ? a.name.slice(0, 12) + '…' : a.name}</option>)}
                 </select>
               )}
 
-              <input
-                type="date"
-                value={filterDateFrom}
-                onChange={(e) => setFilterDateFrom(e.target.value)}
-                className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-1.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC] min-w-max"
-              />
-              <span className="text-xs text-slate-400">-</span>
-              <input
-                type="date"
-                value={filterDateTo}
-                onChange={(e) => setFilterDateTo(e.target.value)}
-                className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-1.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC] min-w-max"
-              />
+              <div className="flex items-center gap-1">
+                <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} className={selectCls} />
+                <span className="text-xs text-slate-400">–</span>
+                <input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} className={selectCls} />
+              </div>
 
               {hasActiveFilters && (
-                <button
-                  onClick={clearFilters}
-                  className="flex items-center gap-1 px-2 py-1.5 text-xs text-slate-500 hover:text-red-600 transition-colors whitespace-nowrap"
-                >
-                  <X className="w-3 h-3" />
-                  Clear
+                <button onClick={clearFilters} className="flex items-center gap-1 px-2 py-1.5 text-xs text-slate-400 hover:text-red-500 transition-colors">
+                  <X className="w-3 h-3" />Clear
                 </button>
               )}
 
-              <div className="ml-auto flex items-center gap-1.5 flex-nowrap">
-                {selectedIds.size > 0 && (
-                  <>
-                    <span className="text-xs font-medium text-[#0052CC] dark:text-blue-400">
-                      {selectedIds.size} selected
-                    </span>
-                    {isLead && (
-                      <button
-                        onClick={() => setShowBulkReassign(true)}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-[#0052CC] text-white rounded-md hover:bg-[#0747A6] font-medium transition-colors">
-                        <Users className="w-3 h-3" />Reassign ({selectedIds.size})
-                      </button>
-                    )}
-                  </>
-                )}
+              <div className="ml-auto">
                 <button
                   onClick={exportCSV}
                   title="Export CSV"
-                  className="flex items-center gap-1.5 px-2 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="w-3.5 h-3.5" />
+                  Export
                 </button>
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
-              {/* Active alert filter indicator */}
-              {(filterPriority || filterUnassigned || filterSlaAtRisk || filterSlaBreached || filterUnresponded) && (
-                <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-800 bg-amber-50 dark:bg-amber-950/20 flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Filtered:</span>
-                  {filterPriority && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">Priority: {filterPriority}</span>}
-                  {filterUnassigned && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">Unassigned</span>}
-                  {filterSlaAtRisk && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">SLA At-Risk</span>}
-                  {filterSlaBreached && <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-medium">SLA Breached</span>}
-                  {filterUnresponded && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">Unresponded &gt;24h</span>}
-                  <button onClick={clearFilters} className="ml-auto text-xs text-slate-400 hover:text-red-500 transition-colors">Clear ×</button>
-                </div>
-              )}
-              
-              {/* Table header */}
-              <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            {/* Active alert filter chips */}
+            {(filterPriority || filterUnassigned || filterSlaAtRisk || filterSlaBreached || filterUnresponded) && (
+              <div className="flex items-center gap-2 flex-wrap mb-3 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40">
+                <span className="text-xs font-medium text-amber-600 dark:text-amber-400">Active filter:</span>
+                {filterPriority && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">Priority: {filterPriority}</span>}
+                {filterUnassigned && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">Unassigned</span>}
+                {filterSlaAtRisk && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">SLA At-Risk</span>}
+                {filterSlaBreached && <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-medium">SLA Breached</span>}
+                {filterUnresponded && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">Unresponded &gt;24h</span>}
+                <button onClick={clearFilters} className="ml-auto text-xs text-slate-400 hover:text-red-500 transition-colors">Clear ×</button>
+              </div>
+            )}
+
+            {/* Table */}
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/30">
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {loading
-                    ? 'Loading...'
-                    : searchQuery
+                  {loading ? 'Loading…' : searchQuery
                     ? `${filteredTickets.length} result${filteredTickets.length !== 1 ? 's' : ''} for "${searchQuery}"`
                     : `${filteredTickets.length} issue${filteredTickets.length !== 1 ? 's' : ''}${hasActiveFilters ? ' (filtered)' : ''}`}
                 </p>
                 {searchQuery && (
-                  <button
-                    onClick={() => router.push('/tickets')}
-                    className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
-                  >
-                    <X className="w-3 h-3" />
-                    Clear search
+                  <button onClick={() => router.push('/tickets')} className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">
+                    <X className="w-3 h-3" />Clear search
                   </button>
                 )}
               </div>
 
               {loading ? (
-                <div className="p-6 space-y-3">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <div key={i} className="h-12 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
+                <div className="p-6 space-y-2.5">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="h-10 bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse" />
                   ))}
                 </div>
               ) : filteredTickets.length === 0 ? (
-                <div className="p-16 text-center">
+                <div className="py-20 text-center">
                   {searchQuery ? (
                     <>
-                      <Search className="w-12 h-12 mx-auto mb-4 text-slate-400 opacity-40" />
-                      <p className="text-base font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        No results for &ldquo;{searchQuery}&rdquo;
-                      </p>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-                        Try a different keyword or ticket key.
-                      </p>
-                      <Button variant="outline" onClick={() => router.push('/tickets')}>
-                        <X className="w-4 h-4 mr-2" />
-                        Clear search
+                      <Search className="w-10 h-10 mx-auto mb-3 text-slate-300 dark:text-slate-600" />
+                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">No results for &ldquo;{searchQuery}&rdquo;</p>
+                      <p className="text-xs text-slate-400 mb-5">Try a different keyword or ticket key.</p>
+                      <Button variant="outline" size="sm" onClick={() => router.push('/tickets')}>
+                        <X className="w-3.5 h-3.5 mr-1.5" />Clear search
                       </Button>
                     </>
                   ) : (
                     <>
-                      <CheckCircle className="w-12 h-12 mx-auto mb-4 text-emerald-400 opacity-40" />
-                      <p className="text-base font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        No issues found
-                      </p>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                      <CheckCircle className="w-10 h-10 mx-auto mb-3 text-emerald-300 dark:text-emerald-700" />
+                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">No issues found</p>
+                      <p className="text-xs text-slate-400 mb-5">
                         {activeTab === 'OPEN' ? 'All caught up — no open issues!' : 'No issues match this filter.'}
                       </p>
-                      <Button
-                        onClick={() => router.push('/create-ticket')}
-                        className="bg-[#0052CC] hover:bg-[#0747A6] text-white"
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Create Issue
-                      </Button>
+                      {isClientUser && (
+                        <Button size="sm" onClick={() => router.push('/create-ticket')} className="bg-[#0052CC] hover:bg-[#0747A6] text-white">
+                          <Plus className="w-3.5 h-3.5 mr-1.5" />Create Issue
+                        </Button>
+                      )}
                     </>
                   )}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 dark:border-slate-800">
-                      <th className="px-4 py-3 w-8">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.size === filteredTickets.length && filteredTickets.length > 0}
-                          onChange={toggleSelectAll}
-                          className="rounded border-slate-300 dark:border-slate-600 text-[#0052CC]"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide w-28">Key</th>
-                      <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide flex-1">Summary</th>
-                      <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide w-48">Description</th>
-                      <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide w-28">Priority</th>
-                      <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide w-32">Status</th>
-                      <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide w-28">Project</th>
-                      {is3SCTeam && <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide w-28">Customer</th>}
-                      {isLead && <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide w-28">Agent</th>}
-                      <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide w-24">Created</th>
-                      {(isClientUser || isLead) && (
-                        <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide w-28">SLA Due</th>
-                      )}
-                      {isLead && (
-                        <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide w-24">SLA Status</th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50 dark:divide-slate-800/80">
-                    {filteredTickets.map((ticket) => (
-                      <tr
-                        key={ticket.id}
-                        onClick={() => router.push(`/tickets/${ticket.ticketKey ?? ticket.id}`)}
-                        className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer transition-colors group ${selectedIds.has(ticket.id) ? 'bg-blue-50 dark:bg-blue-950/20' : ''} ${ticket.slaBreached ? 'border-l-4 border-l-red-500' : ticket.slaBreachRisk ? 'border-l-4 border-l-amber-400' : ''}`}
-                      >
-                        <td className="px-4 py-3.5" onClick={(e) => { e.stopPropagation(); toggleSelect(ticket.id); }}>
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.has(ticket.id)}
-                            onChange={() => toggleSelect(ticket.id)}
-                            className="rounded border-slate-300 dark:border-slate-600 text-[#0052CC]"
-                          />
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <span className="font-mono text-xs font-bold text-[#0052CC] dark:text-blue-400">
-                            {ticket.ticketKey ?? ticket.id}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3.5">
-                          <span className="text-slate-800 dark:text-slate-200 font-medium group-hover:text-[#0052CC] dark:group-hover:text-blue-400 transition-colors line-clamp-1">
-                            {ticket.title}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3.5">
-                          {ticket.description ? (
-                            <span className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">
-                              {ticket.description}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-3.5">
-                          <PriorityBadge priority={ticket.priority} />
-                        </td>
-                        <td className="px-3 py-3.5">
-                          <StatusLozenge status={ticket.status} />
-                        </td>
-                        <td className="px-3 py-3.5">
-                          <span className="text-xs text-slate-600 dark:text-slate-400">
-                            {ticket.project?.name ?? '—'}
-                          </span>
-                        </td>
-                        {is3SCTeam && (
-                          <td className="px-3 py-3.5 text-xs text-slate-600 dark:text-slate-400">{ticket.client?.name ?? '—'}</td>
-                        )}
-                        {isLead && (
-                          <td className="px-3 py-3.5 text-xs text-slate-600 dark:text-slate-400">{ticket.assignedTo?.name ?? <span className="text-slate-300">Unassigned</span>}</td>
-                        )}
-                        <td className="px-3 py-3.5 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                          {formatDate(ticket.createdAt)}
-                        </td>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/40">
+                        <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-28">Key</th>
+                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Summary</th>
+                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-28">Priority</th>
+                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-32">Status</th>
+                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-36">Project</th>
+                        {is3SCTeam && <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-28">Customer</th>}
+                        {isLead && <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-28">Agent</th>}
+                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-24">Created</th>
                         {(isClientUser || isLead) && (
-                          <td className="px-3 py-3.5 text-xs whitespace-nowrap">
-                            {ticket.slaDueAt ? (
-                              <span className={ticket.slaBreached ? 'text-red-600 font-semibold flex items-center gap-1' : ticket.slaBreachRisk ? 'text-amber-600 font-medium flex items-center gap-1' : 'text-slate-500 dark:text-slate-400'}>
-                                {ticket.slaBreached && <ShieldAlert className="w-3 h-3" />}
-                                {formatDate(ticket.slaDueAt)}
-                              </span>
-                            ) : (
-                              <span className="text-slate-400">—</span>
-                            )}
-                          </td>
+                          <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-28">SLA Due</th>
                         )}
                         {isLead && (
-                          <td className="px-3 py-3.5 text-xs">
-                            {ticket.slaBreached ? (
-                              <span className="flex items-center gap-1 text-red-600 font-semibold"><ShieldAlert className="w-3 h-3" />Breached</span>
-                            ) : ticket.slaBreachRisk ? (
-                              <span className="text-amber-600 font-medium">At Risk</span>
-                            ) : (
-                              <span className="text-emerald-600">OK</span>
-                            )}
-                          </td>
+                          <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-24">SLA</th>
                         )}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                      {filteredTickets.map((ticket) => {
+                        const key = ticket.ticketKey ?? generateTicketKey(ticket.project, ticket.id);
+                        return (
+                          <tr
+                            key={ticket.id}
+                            onClick={() => router.push(`/tickets/${key}`)}
+                            className={`cursor-pointer transition-colors group hover:bg-slate-50/80 dark:hover:bg-slate-800/30 ${ticket.slaBreached ? 'border-l-[3px] border-l-red-500' : ticket.slaBreachRisk ? 'border-l-[3px] border-l-amber-400' : ''}`}
+                          >
+                            <td className="px-4 py-3">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/50 font-mono text-[11px] font-semibold text-[#0052CC] dark:text-blue-400 tracking-wide">
+                                {key}
+                              </span>
+                            </td>
+                            <td className="px-3 py-3 max-w-xs">
+                              <span className="text-sm text-slate-800 dark:text-slate-200 font-medium group-hover:text-[#0052CC] dark:group-hover:text-blue-400 transition-colors line-clamp-1">
+                                {ticket.title}
+                              </span>
+                              {ticket.description && (
+                                <p className="text-xs text-slate-400 dark:text-slate-500 line-clamp-1 mt-0.5">{ticket.description}</p>
+                              )}
+                            </td>
+                            <td className="px-3 py-3">
+                              <PriorityBadge priority={ticket.priority} />
+                            </td>
+                            <td className="px-3 py-3">
+                              <StatusLozenge status={ticket.status} />
+                            </td>
+                            <td className="px-3 py-3">
+                              <span className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1">
+                                {ticket.project?.name ?? <span className="text-slate-300 dark:text-slate-600">—</span>}
+                              </span>
+                            </td>
+                            {is3SCTeam && (
+                              <td className="px-3 py-3 text-xs text-slate-500 dark:text-slate-400">{ticket.client?.name ?? '—'}</td>
+                            )}
+                            {isLead && (
+                              <td className="px-3 py-3 text-xs text-slate-500 dark:text-slate-400">
+                                {ticket.assignedTo?.name ?? <span className="text-slate-300 dark:text-slate-600 italic">Unassigned</span>}
+                              </td>
+                            )}
+                            <td className="px-3 py-3 text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                              {formatDateShort(ticket.createdAt)}
+                            </td>
+                            {(isClientUser || isLead) && (
+                              <td className="px-3 py-3 text-xs whitespace-nowrap">
+                                {ticket.slaDueAt ? (
+                                  <span className={`flex items-center gap-1 ${ticket.slaBreached ? 'text-red-600 font-semibold' : ticket.slaBreachRisk ? 'text-amber-600 font-medium' : 'text-slate-400'}`}>
+                                    {ticket.slaBreached && <ShieldAlert className="w-3 h-3" />}
+                                    {ticket.slaBreachRisk && !ticket.slaBreached && <Clock className="w-3 h-3" />}
+                                    {formatDateShort(ticket.slaDueAt)}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-300 dark:text-slate-600">—</span>
+                                )}
+                              </td>
+                            )}
+                            {isLead && (
+                              <td className="px-3 py-3 text-xs">
+                                {ticket.slaBreached ? (
+                                  <span className="inline-flex items-center gap-1 text-red-600 font-semibold"><ShieldAlert className="w-3 h-3" />Breached</span>
+                                ) : ticket.slaBreachRisk ? (
+                                  <span className="text-amber-500 font-medium">At Risk</span>
+                                ) : (
+                                  <span className="text-emerald-500">OK</span>
+                                )}
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
           </main>
         </div>
       </div>
-
-      {/* Bulk reassign modal */}
-      {showBulkReassign && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 w-full max-w-sm p-5 shadow-xl">
-            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Bulk Reassign</h3>
-            <p className="text-xs text-slate-400 mb-4">{selectedIds.size} issue{selectedIds.size !== 1 ? 's' : ''} selected</p>
-            <label className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5 block">Assign to agent</label>
-            <select value={bulkAgent} onChange={(e) => setBulkAgent(e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-[#0052CC] mb-4 text-slate-800 dark:text-slate-200">
-              <option value="">Select agent...</option>
-              {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-            <div className="flex gap-2">
-              <button onClick={() => setShowBulkReassign(false)} className="flex-1 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-md text-slate-600 hover:bg-slate-50">Cancel</button>
-              <button onClick={handleBulkReassign} disabled={!bulkAgent || bulkSaving}
-                className="flex-1 py-2 text-sm bg-[#0052CC] hover:bg-[#0747A6] text-white rounded-md font-medium disabled:opacity-50">
-                {bulkSaving ? 'Reassigning...' : 'Reassign All'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -707,10 +540,10 @@ function TicketsContent() {
 export default function TicketsPage() {
   return (
     <Suspense fallback={
-      <div className="h-screen w-screen flex items-center justify-center bg-[#F4F5F7] dark:bg-slate-950">
-        <div className="flex items-center gap-2 text-slate-500">
+      <div className="h-screen w-screen flex items-center justify-center bg-[#F8F9FB] dark:bg-slate-950">
+        <div className="flex items-center gap-2 text-slate-400">
           <div className="w-4 h-4 border-2 border-[#0052CC] border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm">Loading issues...</span>
+          <span className="text-sm">Loading issues…</span>
         </div>
       </div>
     }>

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -98,7 +98,7 @@ export default function UserDashboard() {
     .slice(0, 5);
 
   return (
-    <div className="h-screen w-screen flex overflow-hidden bg-[#F4F5F7] dark:bg-slate-950">
+    <div className="h-screen w-screen flex overflow-hidden bg-[#F8F9FB] dark:bg-slate-950">
       <AppSidebar />
 
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -170,44 +170,50 @@ export default function UserDashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div
                 onClick={() => router.push("/tickets?status=OPEN")}
-                className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 border-l-4 border-l-red-500 p-5 cursor-pointer hover:shadow-md transition-shadow"
+                className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 border-l-[3px] border-l-slate-400 px-4 py-3 cursor-pointer hover:shadow-md shadow-sm transition-all"
               >
-                <div className="flex items-start justify-between mb-2">
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">My Open Issues</p>
-                  <AlertCircle className="w-4 h-4 text-red-500 opacity-60" />
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">My Open Issues</p>
+                  <div className="p-1 rounded-md bg-slate-100 dark:bg-slate-800">
+                    <AlertCircle className="w-3 h-3 text-slate-500" />
+                  </div>
                 </div>
-                <p className="text-3xl font-bold text-red-600 dark:text-red-400">
+                <p className="text-[22px] font-bold tabular-nums text-slate-900 dark:text-slate-50 leading-none">
                   {loading ? "—" : openIssues.length}
                 </p>
-                <p className="text-xs text-slate-500 mt-1">Open, Acknowledged, In Progress</p>
+                <p className="text-[11px] text-slate-400 mt-1">Open · Acknowledged · In Progress</p>
               </div>
 
               <div
                 onClick={() => router.push("/tickets?status=ACKNOWLEDGED")}
-                className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 border-l-4 border-l-purple-500 p-5 cursor-pointer hover:shadow-md transition-shadow"
+                className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 border-l-[3px] border-l-blue-400 px-4 py-3 cursor-pointer hover:shadow-md shadow-sm transition-all"
               >
-                <div className="flex items-start justify-between mb-2">
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Awaiting Response</p>
-                  <MessageSquare className="w-4 h-4 text-purple-500 opacity-60" />
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Awaiting Response</p>
+                  <div className="p-1 rounded-md bg-blue-50 dark:bg-blue-950/40">
+                    <MessageSquare className="w-3 h-3 text-blue-500" />
+                  </div>
                 </div>
-                <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">
+                <p className="text-[22px] font-bold tabular-nums text-slate-900 dark:text-slate-50 leading-none">
                   {loading ? "—" : awaitingResponse.length}
                 </p>
-                <p className="text-xs text-slate-500 mt-1">Agent is reviewing your issues</p>
+                <p className="text-[11px] text-slate-400 mt-1">Agent is reviewing your issues</p>
               </div>
 
               <div
                 onClick={() => router.push("/tickets?status=RESOLVED")}
-                className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 border-l-4 border-l-emerald-500 p-5 cursor-pointer hover:shadow-md transition-shadow"
+                className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 border-l-[3px] border-l-emerald-400 px-4 py-3 cursor-pointer hover:shadow-md shadow-sm transition-all"
               >
-                <div className="flex items-start justify-between mb-2">
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Resolved This Month</p>
-                  <CheckCircle className="w-4 h-4 text-emerald-500 opacity-60" />
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Resolved This Month</p>
+                  <div className="p-1 rounded-md bg-emerald-50 dark:bg-emerald-950/40">
+                    <CheckCircle className="w-3 h-3 text-emerald-600" />
+                  </div>
                 </div>
-                <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
+                <p className="text-[22px] font-bold tabular-nums text-slate-900 dark:text-slate-50 leading-none">
                   {loading ? "—" : resolvedThisMonth.length}
                 </p>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-[11px] text-slate-400 mt-1">
                   {new Date().toLocaleString("en-US", { month: "long", year: "numeric" })}
                 </p>
               </div>
@@ -222,7 +228,7 @@ export default function UserDashboard() {
               </div>
 
               {/* Right Column - Recent Issues */}
-              <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+              <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
               <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800">
                 <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">My Recent Issues</h2>
                 <Button
@@ -315,7 +321,7 @@ export default function UserDashboard() {
               </div>
 
               {/* Quick actions */}
-              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-4 space-y-2">
+              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 space-y-2">
                 <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">Quick Actions</p>
                 <button
                   onClick={() => router.push("/create-ticket")}

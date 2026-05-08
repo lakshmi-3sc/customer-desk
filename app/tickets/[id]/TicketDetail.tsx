@@ -707,7 +707,7 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
     <div className="fixed inset-0 flex overflow-hidden">
       <AppSidebar />
 
-        <div className="min-w-0 flex-1 flex flex-col overflow-hidden bg-[#F4F5F7] dark:bg-slate-950">
+        <div className="min-w-0 flex-1 flex flex-col overflow-hidden bg-[#F8F9FB] dark:bg-slate-950">
         {/* Top breadcrumb bar */}
         <TopBar
           left={

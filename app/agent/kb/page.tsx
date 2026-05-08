@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -67,7 +67,7 @@ export default function AgentKbPage() {
   const clearSearch = () => { setQuery(""); setDebouncedQuery(""); setCategoryFilter(""); setIssues([]); setHasSearched(false); };
 
   return (
-    <div className="h-screen w-screen flex overflow-hidden bg-[#F4F5F7] dark:bg-slate-950">
+    <div className="h-screen w-screen flex overflow-hidden bg-[#F8F9FB] dark:bg-slate-950">
       <AppSidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar left={<span className="text-sm font-semibold text-slate-800 dark:text-slate-200">Knowledge Base</span>} />

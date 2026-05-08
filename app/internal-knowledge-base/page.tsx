@@ -74,7 +74,7 @@ export default function InternalKnowledgeBasePage() {
   const showArticleList = query.length > 0 || category.length > 0;
 
   return (
-    <div className="h-screen w-screen flex overflow-hidden bg-[#F4F5F7] dark:bg-slate-950">
+    <div className="h-screen w-screen flex overflow-hidden bg-[#F8F9FB] dark:bg-slate-950">
       <AppSidebar />
 
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -115,7 +115,7 @@ export default function InternalKnowledgeBasePage() {
                   placeholder="Search articles..."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0052CC] focus:border-transparent"
+                  className="w-full pl-12 pr-4 py-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0052CC] focus:border-transparent"
                 />
                 {query && (
                   <button

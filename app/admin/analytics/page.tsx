@@ -14,7 +14,7 @@ import {
   Tooltip, ResponsiveContainer, Legend, Cell, ReferenceLine,
 } from "recharts";
 
-// ─── Types ─────────────────────────────────────────────────────────────────
+// --- Types -----------------------------------------------------------------
 
 interface AnalyticsData {
   volumeByDay: { day: string; created: number; resolved: number; slaBreaches: number }[];
@@ -31,7 +31,7 @@ interface AnalyticsData {
   };
 }
 
-// ─── Constants ──────────────────────────────────────────────────────────────
+// --- Constants --------------------------------------------------------------
 
 const DAYS_OPTIONS = [30, 60, 90];
 
@@ -47,9 +47,9 @@ const PRIORITY_COLORS: Record<string, string> = {
   CRITICAL: "#EF4444", HIGH: "#F59E0B", MEDIUM: "#3B82F6", LOW: "#94A3B8",
 };
 
-const MEDAL = ["🥇", "🥈", "🥉"];
+const MEDAL = ["??", "??", "??"];
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// --- Helpers ----------------------------------------------------------------
 
 function buildForecast(volumeByDay: AnalyticsData["volumeByDay"], horizon = 7) {
   if (volumeByDay.length < 7) return [];
@@ -106,7 +106,7 @@ function exportAllCSV(data: AnalyticsData) {
   URL.revokeObjectURL(url);
 }
 
-// ─── Sub-components ─────────────────────────────────────────────────────────
+// --- Sub-components ---------------------------------------------------------
 
 function SummaryChip({
   label, value, sub, good,
@@ -117,7 +117,7 @@ function SummaryChip({
     <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 flex flex-col gap-1">
       <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</p>
       <div className="flex items-end gap-1.5">
-        <span className="text-2xl font-bold text-slate-900 dark:text-slate-100 tabular-nums">{value}</span>
+        <span className="text-2xl font-semibold text-slate-900 dark:text-slate-100 tabular-nums">{value}</span>
         <Icon className={`w-4 h-4 mb-0.5 ${color}`} />
       </div>
       {sub && <p className="text-[11px] text-slate-400">{sub}</p>}
@@ -179,7 +179,7 @@ const ForecastTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-// ─── Page ───────────────────────────────────────────────────────────────────
+// --- Page -------------------------------------------------------------------
 
 export default function AnalyticsPage() {
   const router = useRouter();
@@ -222,7 +222,7 @@ export default function AnalyticsPage() {
   const selectCls = "text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-[#0052CC]";
 
   return (
-    <div className="h-screen w-screen flex overflow-hidden bg-[#F4F5F7] dark:bg-slate-950">
+    <div className="h-screen w-screen flex overflow-hidden bg-[#F8F9FB] dark:bg-slate-950">
       <AppSidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar
@@ -250,7 +250,7 @@ export default function AnalyticsPage() {
 
         <main className="flex-1 overflow-y-auto p-6 space-y-6">
 
-          {/* ── Filter Bar ──────────────────────────────────────────── */}
+          {/* -- Filter Bar -------------------------------------------- */}
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 px-4 py-3 flex items-center gap-3 flex-wrap">
             <Filter className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
 
@@ -289,7 +289,7 @@ export default function AnalyticsPage() {
             )}
           </div>
 
-          {/* ── Summary Chips ────────────────────────────────────────── */}
+          {/* -- Summary Chips ------------------------------------------ */}
           <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
             {loading ? (
               Array.from({ length: 6 }).map((_, i) => (
@@ -316,7 +316,7 @@ export default function AnalyticsPage() {
             )}
           </div>
 
-          {/* ── Volume Trend + SLA Overlay ───────────────────────────── */}
+          {/* -- Volume Trend + SLA Overlay ----------------------------- */}
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5">
             <div className="flex items-start justify-between mb-5">
               <div>
@@ -393,7 +393,7 @@ export default function AnalyticsPage() {
             )}
           </div>
 
-          {/* ── Priority Trend ───────────────────────────────────────── */}
+          {/* -- Priority Trend ----------------------------------------- */}
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5">
             <div className="flex items-start justify-between mb-5">
               <div>
@@ -441,7 +441,7 @@ export default function AnalyticsPage() {
             )}
           </div>
 
-          {/* ── Category + SLA Compliance ────────────────────────────── */}
+          {/* -- Category + SLA Compliance ------------------------------ */}
           <div className="grid grid-cols-2 gap-6">
 
             <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5">
@@ -554,7 +554,7 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          {/* ── Agent Performance Leaderboard ─────────────────────────── */}
+          {/* -- Agent Performance Leaderboard --------------------------- */}
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5">
             <div className="flex items-start justify-between mb-5">
               <div>
@@ -612,7 +612,7 @@ export default function AnalyticsPage() {
             )}
           </div>
 
-          {/* ── AI Feature Adoption ──────────────────────────────────── */}
+          {/* -- AI Feature Adoption ------------------------------------ */}
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5">
             <div className="flex items-start justify-between mb-4">
               <div>

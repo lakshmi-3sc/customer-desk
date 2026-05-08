@@ -43,7 +43,7 @@ export default function AIConfigPage() {
   };
 
   return (
-    <div className="h-screen w-screen flex overflow-hidden bg-[#F4F5F7] dark:bg-slate-950">
+    <div className="h-screen w-screen flex overflow-hidden bg-[#F8F9FB] dark:bg-slate-950">
       <AppSidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar
@@ -162,7 +162,7 @@ export default function AIConfigPage() {
                   <span className="text-slate-500 dark:text-slate-400">Accuracy</span>
                   <span className="text-slate-700 dark:text-slate-300 font-medium">91.3%</span>
                 </div>
-                <button className="text-xs text-[#0052CC] hover:underline mt-1">Trigger retraining →</button>
+                <button className="text-xs text-[#0052CC] hover:underline mt-1">Trigger retraining ?</button>
               </div>
             </div>
           </div>

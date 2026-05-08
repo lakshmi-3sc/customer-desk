@@ -74,7 +74,7 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="h-screen w-screen flex overflow-hidden bg-[#F4F5F7] dark:bg-slate-950">
+    <div className="h-screen w-screen flex overflow-hidden bg-[#F8F9FB] dark:bg-slate-950">
       <AppSidebar />
 
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -105,7 +105,7 @@ export default function NotificationsPage() {
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Notifications</h1>
+                <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Notifications</h1>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
                   {loading ? "Loading…" : unreadCount > 0 ? `${unreadCount} unread` : "All caught up"}
                 </p>

@@ -87,7 +87,7 @@ export default function AuditTrailPage() {
   };
 
   return (
-    <div className="h-screen w-screen flex overflow-hidden bg-[#F4F5F7] dark:bg-slate-950">
+    <div className="h-screen w-screen flex overflow-hidden bg-[#F8F9FB] dark:bg-slate-950">
       <AppSidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar
@@ -170,7 +170,7 @@ export default function AuditTrailPage() {
                           </div>
                           <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                             {entry.oldValue && (
-                              <><span className="line-through text-slate-400">{entry.oldValue}</span><span>→</span></>
+                              <><span className="line-through text-slate-400">{entry.oldValue}</span><span>?</span></>
                             )}
                             {entry.newValue && <span className="font-medium text-slate-700 dark:text-slate-300">{entry.newValue}</span>}
                             {entry.issue && (

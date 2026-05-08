@@ -29,6 +29,8 @@ import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/lib/workspace-context";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 
+const SIDEBAR_BG = "#0052CC";
+
 interface NavItemProps {
   href: string;
   icon: React.ReactNode;
@@ -45,26 +47,29 @@ function NavItem({ href, icon, label, active, indent, badge, collapsed }: NavIte
       href={href}
       title={collapsed ? label : ""}
       className={cn(
-        "relative group flex items-center gap-2.5 rounded-md font-medium transition-colors duration-150",
+        "relative group flex items-center gap-2.5 rounded-md font-medium transition-all duration-150",
         collapsed ? "mx-1 px-2.5 py-2.5 justify-center" : "px-3 py-2 justify-start",
-        "text-sm",
-        indent && !collapsed && "ml-6",
+        "text-[13px]",
+        indent && !collapsed && "ml-5",
         active
-          ? "bg-white/20 text-white shadow-sm"
-          : "text-blue-100 hover:bg-white/10 hover:text-white"
+          ? "bg-white/[0.12] text-white"
+          : "text-white/60 hover:bg-white/[0.07] hover:text-white/90"
       )}
     >
+      {/* Active left accent bar */}
       {active && !collapsed && (
-        <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-white" />
+        <span className="absolute left-0 top-1 bottom-1 w-[3px] rounded-full bg-white/80" />
       )}
-      <span className={cn("flex-shrink-0", active ? "text-white" : "text-blue-100/80")}>
+
+      <span className={cn("flex-shrink-0 transition-colors", active ? "text-white" : "text-white/50 group-hover:text-white/80")}>
         {icon}
       </span>
+
       {!collapsed && (
         <>
           <span className="flex-1 truncate">{label}</span>
           {badge !== undefined && badge > 0 && (
-            <span className="flex-shrink-0 bg-red-500 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+            <span className="flex-shrink-0 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[17px] h-[17px] flex items-center justify-center px-1">
               {badge > 99 ? "99+" : badge}
             </span>
           )}
@@ -73,7 +78,7 @@ function NavItem({ href, icon, label, active, indent, badge, collapsed }: NavIte
 
       {/* Tooltip for collapsed state */}
       {collapsed && (
-        <div className="absolute left-full ml-2 px-2 py-1 bg-slate-950 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-lg">
+        <div className="absolute left-full ml-2.5 px-2.5 py-1.5 bg-slate-900 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-lg border border-white/10">
           {label}
         </div>
       )}
@@ -83,12 +88,11 @@ function NavItem({ href, icon, label, active, indent, badge, collapsed }: NavIte
 
 function SectionLabel({ children, collapsed }: { children?: React.ReactNode; collapsed?: boolean }) {
   if (collapsed) {
-    return <div className="mx-3 my-2 h-px bg-white/15" />;
+    return <div className="mx-3 my-2.5 h-px bg-white/10" />;
   }
-
   return (
-    <div className="px-3 pt-4 pb-1.5">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-200/70">
+    <div className="px-3 pt-5 pb-1">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">
         {children}
       </p>
     </div>
@@ -101,7 +105,6 @@ export function AppSidebar() {
   const { currentWorkspace } = useWorkspace();
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
-
     try {
       return JSON.parse(localStorage.getItem("sidebar-collapsed") || "false");
     } catch {
@@ -109,7 +112,6 @@ export function AppSidebar() {
     }
   });
 
-  // Save sidebar state to localStorage
   const toggleSidebar = () => {
     const newState = !collapsed;
     setCollapsed(newState);
@@ -117,307 +119,175 @@ export function AppSidebar() {
   };
 
   const userRole = session?.user?.role as string | undefined;
-  const is3SCTeam =
-    userRole &&
-    ["THREESC_ADMIN", "THREESC_LEAD", "THREESC_AGENT"].includes(userRole);
-
+  const is3SCTeam = userRole && ["THREESC_ADMIN", "THREESC_LEAD", "THREESC_AGENT"].includes(userRole);
   const isClientUser = userRole === "CLIENT_USER";
   const isClientAdmin = userRole === "CLIENT_ADMIN";
   const isAdmin = userRole === "THREESC_ADMIN";
   const isLead = userRole === "THREESC_LEAD";
   const isAgent = userRole === "THREESC_AGENT";
   const isTicketDetail = pathname.startsWith("/tickets/");
-  const isTicketsActive =
-    pathname === "/tickets" || isTicketDetail;
-
+  const isTicketsActive = pathname === "/tickets" || isTicketDetail;
   const isClientWorkspace = !is3SCTeam;
-  const sidebarColor = "#0052CC";
   const portalName = isClientWorkspace ? currentWorkspace?.name || "3SC Connect" : "3SC Connect";
-  const portalSubtitle = isClientWorkspace ? "Workspace" : isAdmin ? "Admin Portal" : isLead ? "Lead Portal" : isAgent ? "Agent Portal" : "Portal";
+  const portalSubtitle = isClientWorkspace ? "Workspace" : isAdmin ? "Admin" : isLead ? "Lead" : isAgent ? "Agent" : "Portal";
   const portalInitials = isClientWorkspace ? currentWorkspace?.name.substring(0, 2).toUpperCase() || "3S" : "3S";
 
   return (
     <div
       className={cn(
-        "flex-shrink-0 h-full flex flex-col overflow-hidden border-r border-blue-900/20 transition-all duration-300",
-        collapsed ? "w-[72px]" : "w-64"
+        "flex-shrink-0 h-full flex flex-col overflow-hidden transition-all duration-300",
+        collapsed ? "w-[64px]" : "w-60"
       )}
-      style={{ backgroundColor: sidebarColor }}
-    >
-      {/* Header with Logo & Toggle */}
-      <div className="h-14 flex items-center justify-between gap-2 px-3 border-b border-white/10 flex-shrink-0">
+      style={{ backgroundColor: SIDEBAR_BG }}
+>
+
+      {/* Header */}
+      <div className="h-14 flex items-center justify-between gap-2 px-3 border-b border-white/[0.08] flex-shrink-0">
         {!collapsed && (
           <div className="flex items-center gap-2.5 flex-1 min-w-0">
             {isClientWorkspace && currentWorkspace?.logoUrl ? (
               <img
                 src={currentWorkspace.logoUrl}
                 alt={currentWorkspace.name}
-                className="w-8 h-8 rounded-md flex-shrink-0 object-cover ring-1 ring-white/20"
+                className="w-7 h-7 rounded-md flex-shrink-0 object-cover ring-1 ring-white/20"
               />
             ) : (
-              <div
-                className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 bg-white text-[#0052CC] shadow-sm"
-              >
-                <span className="text-xs font-black">
-                  {portalInitials}
-                </span>
+              <div className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 bg-white/10 border border-white/20">
+                <span className="text-[11px] font-bold text-white">{portalInitials}</span>
               </div>
             )}
             <div className="min-w-0">
-              <span className="text-white font-semibold text-sm block leading-tight truncate">
-                {portalName}
-              </span>
-              <span className="text-blue-100/70 text-[11px] block leading-tight">
-                {portalSubtitle}
-              </span>
+              <span className="text-white font-semibold text-[13px] block leading-tight truncate">{portalName}</span>
+              <span className="text-white/40 text-[10px] block leading-tight">{portalSubtitle}</span>
             </div>
           </div>
         )}
         <button
           onClick={toggleSidebar}
-          className="p-1.5 rounded-md transition-colors text-blue-100 hover:bg-white/10 hover:text-white flex-shrink-0"
+          className="p-1.5 rounded-md transition-colors text-white/40 hover:text-white hover:bg-white/10 flex-shrink-0"
           title={collapsed ? "Expand" : "Collapse"}
         >
-          {collapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
+          {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
         </button>
       </div>
 
       {/* Workspace Switcher */}
       {!collapsed && isClientWorkspace && <WorkspaceSwitcher />}
 
-      {/* Create Button — clients only */}
+      {/* Create Ticket button — clients only */}
       {!is3SCTeam && !collapsed && (
-        <div className="px-3 pt-4 pb-3 flex-shrink-0">
+        <div className="px-3 pt-3 pb-2 flex-shrink-0">
           <Link
             href="/create-ticket"
             className={cn(
-              "flex items-center justify-center gap-2 w-full py-2 px-4 rounded-md text-sm font-semibold text-white transition-colors shadow-sm",
-              pathname === "/create-ticket"
-                ? "opacity-95"
-                : "hover:opacity-90"
+              "flex items-center justify-center gap-1.5 w-full py-1.5 px-4 rounded-md text-[13px] font-semibold text-white transition-all shadow-sm",
+              "bg-white/15 hover:bg-white/20 border border-white/20"
             )}
-            style={{ backgroundColor: sidebarColor }}
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             Create Ticket
           </Link>
         </div>
       )}
 
       {!is3SCTeam && collapsed && (
-        <div className="px-2 pt-4 pb-2 flex-shrink-0">
+        <div className="px-2 pt-3 pb-2 flex-shrink-0">
           <Link
             href="/create-ticket"
             title="Create Ticket"
-            className="flex items-center justify-center w-full py-2.5 px-3 rounded-md text-white transition-colors hover:opacity-90"
-            style={{ backgroundColor: sidebarColor }}
+            className="flex items-center justify-center w-full py-2.5 rounded-md text-white transition-colors bg-white/15 hover:bg-white/20 border border-white/20"
           >
-            <Plus className="w-5 h-5" />
+            <Plus className="w-4 h-4" />
           </Link>
         </div>
       )}
 
       {/* Navigation */}
-      <nav className="flex-1 py-3 px-2 overflow-y-auto space-y-0.5">
+      <nav className="flex-1 py-2 px-1.5 overflow-y-auto space-y-0.5">
         {!is3SCTeam && (
-          <NavItem
-            href="/dashboard"
-            icon={<LayoutDashboard className="w-5 h-5" />}
-            label="Dashboard"
-            active={pathname === "/dashboard"}
-            collapsed={collapsed}
-          />
+          <NavItem href="/dashboard" icon={<LayoutDashboard className="w-4 h-4" />} label="Dashboard"
+            active={pathname === "/dashboard"} collapsed={collapsed} />
+        )}
+        {!is3SCTeam && (
+          <NavItem href="/tickets" icon={<Ticket className="w-4 h-4" />} label="Issues"
+            active={isTicketsActive} collapsed={collapsed} />
         )}
 
-        {!is3SCTeam && (
-          <NavItem
-            href="/tickets"
-            icon={<Ticket className="w-5 h-5" />}
-            label="Issues"
-            active={isTicketsActive}
-            collapsed={collapsed}
-          />
-        )}
-
-        {/* CLIENT_USER-only nav items */}
         {isClientUser && (
           <>
-            <NavItem
-              href="/knowledge-base"
-              icon={<BookOpen className="w-5 h-5" />}
-              label="Knowledge Base"
-              active={pathname.startsWith("/knowledge-base")}
-              collapsed={collapsed}
-            />
-            <NavItem
-              href="/notifications"
-              icon={<Bell className="w-5 h-5" />}
-              label="Notifications"
-              active={pathname === "/notifications"}
-              collapsed={collapsed}
-            />
+            <NavItem href="/knowledge-base" icon={<BookOpen className="w-4 h-4" />} label="Knowledge Base"
+              active={pathname.startsWith("/knowledge-base")} collapsed={collapsed} />
+            <NavItem href="/notifications" icon={<Bell className="w-4 h-4" />} label="Notifications"
+              active={pathname === "/notifications"} collapsed={collapsed} />
           </>
         )}
 
-        {/* CLIENT_ADMIN-only nav items */}
         {isClientAdmin && (
           <>
-            <NavItem
-              href="/knowledge-base"
-              icon={<BookOpen className="w-5 h-5" />}
-              label="Knowledge Base"
-              active={pathname.startsWith("/knowledge-base")}
-              collapsed={collapsed}
-            />
-            <NavItem
-              href="/team"
-              icon={<Users className="w-5 h-5" />}
-              label="Team"
-              active={pathname === "/team"}
-              collapsed={collapsed}
-            />
-            <NavItem
-              href="/reports"
-              icon={<BarChart2 className="w-5 h-5" />}
-              label="Reports"
-              active={pathname === "/reports"}
-              collapsed={collapsed}
-            />
-            <NavItem
-              href="/settings"
-              icon={<Settings className="w-5 h-5" />}
-              label="Settings"
-              active={pathname === "/settings"}
-              collapsed={collapsed}
-            />
+            <NavItem href="/knowledge-base" icon={<BookOpen className="w-4 h-4" />} label="Knowledge Base"
+              active={pathname.startsWith("/knowledge-base")} collapsed={collapsed} />
+            <NavItem href="/team" icon={<Users className="w-4 h-4" />} label="Team"
+              active={pathname === "/team"} collapsed={collapsed} />
+            <NavItem href="/reports" icon={<BarChart2 className="w-4 h-4" />} label="Reports"
+              active={pathname === "/reports"} collapsed={collapsed} />
+            <NavItem href="/settings" icon={<Settings className="w-4 h-4" />} label="Settings"
+              active={pathname === "/settings"} collapsed={collapsed} />
           </>
         )}
 
-        {/* THREESC_LEAD nav */}
-        {isLead && !collapsed && (
+        {isLead && (
           <>
-            <SectionLabel>Lead</SectionLabel>
-            <NavItem href="/dashboard" icon={<LayoutDashboard className="w-5 h-5" />} label="Dashboard" active={pathname === "/dashboard"} collapsed={collapsed} />
-            <NavItem href="/tickets" icon={<Ticket className="w-5 h-5" />} label="All Issues" active={pathname === "/tickets"} collapsed={collapsed} />
-            <NavItem href="/lead/workload" icon={<Users className="w-5 h-5" />} label="Workload" active={pathname.startsWith("/lead/workload")} collapsed={collapsed} />
-            <NavItem href="/lead/escalations" icon={<ShieldAlert className="w-5 h-5" />} label="Escalations" active={pathname.startsWith("/lead/escalations")} collapsed={collapsed} />
-            <NavItem href="/lead/projects" icon={<Layers className="w-5 h-5" />} label="Projects" active={pathname.startsWith("/lead/projects")} collapsed={collapsed} />
-            <NavItem href="/lead/reports" icon={<BarChart2 className="w-5 h-5" />} label="Reports" active={pathname.startsWith("/lead/reports")} collapsed={collapsed} />
+            <SectionLabel collapsed={collapsed}>Lead</SectionLabel>
+            <NavItem href="/dashboard" icon={<LayoutDashboard className="w-4 h-4" />} label="Dashboard"
+              active={pathname === "/dashboard"} collapsed={collapsed} />
+            <NavItem href="/tickets" icon={<Ticket className="w-4 h-4" />} label="All Issues"
+              active={pathname === "/tickets"} collapsed={collapsed} />
+            <NavItem href="/lead/workload" icon={<Users className="w-4 h-4" />} label="Workload"
+              active={pathname.startsWith("/lead/workload")} collapsed={collapsed} />
+            <NavItem href="/lead/escalations" icon={<ShieldAlert className="w-4 h-4" />} label="Escalations"
+              active={pathname.startsWith("/lead/escalations")} collapsed={collapsed} />
+            <NavItem href="/lead/projects" icon={<Layers className="w-4 h-4" />} label="Projects"
+              active={pathname.startsWith("/lead/projects")} collapsed={collapsed} />
+            <NavItem href="/lead/reports" icon={<BarChart2 className="w-4 h-4" />} label="Reports"
+              active={pathname.startsWith("/lead/reports")} collapsed={collapsed} />
           </>
         )}
 
-        {isLead && collapsed && (
-          <>
-            <SectionLabel collapsed />
-            <NavItem href="/dashboard" icon={<LayoutDashboard className="w-5 h-5" />} label="Dashboard" active={pathname === "/dashboard"} collapsed={collapsed} />
-            <NavItem href="/tickets" icon={<Ticket className="w-5 h-5" />} label="Issues" active={pathname === "/tickets"} collapsed={collapsed} />
-            <NavItem href="/lead/workload" icon={<Users className="w-5 h-5" />} label="Workload" active={pathname.startsWith("/lead/workload")} collapsed={collapsed} />
-            <NavItem href="/lead/escalations" icon={<ShieldAlert className="w-5 h-5" />} label="Escalations" active={pathname.startsWith("/lead/escalations")} collapsed={collapsed} />
-            <NavItem href="/lead/projects" icon={<Layers className="w-5 h-5" />} label="Projects" active={pathname.startsWith("/lead/projects")} collapsed={collapsed} />
-            <NavItem href="/lead/reports" icon={<BarChart2 className="w-5 h-5" />} label="Reports" active={pathname.startsWith("/lead/reports")} collapsed={collapsed} />
-          </>
-        )}
-
-        {/* THREESC_AGENT nav */}
         {isAgent && (
           <>
             <SectionLabel collapsed={collapsed}>Agent</SectionLabel>
-            <NavItem href="/dashboard" icon={<LayoutDashboard className="w-5 h-5" />} label="Dashboard" active={pathname === "/dashboard"} collapsed={collapsed} />
-            <NavItem href="/tickets" icon={<Ticket className="w-5 h-5" />} label="Issues" active={pathname === "/tickets"} collapsed={collapsed} />
-            <NavItem href="/agent/kb" icon={<BookOpen className="w-5 h-5" />} label="Knowledge Base" active={pathname.startsWith("/agent/kb")} collapsed={collapsed} />
+            <NavItem href="/dashboard" icon={<LayoutDashboard className="w-4 h-4" />} label="Dashboard"
+              active={pathname === "/dashboard"} collapsed={collapsed} />
+            <NavItem href="/tickets" icon={<Ticket className="w-4 h-4" />} label="Issues"
+              active={pathname === "/tickets"} collapsed={collapsed} />
+            <NavItem href="/agent/kb" icon={<BookOpen className="w-4 h-4" />} label="Knowledge Base"
+              active={pathname.startsWith("/agent/kb")} collapsed={collapsed} />
           </>
         )}
 
-        {/* THREESC_ADMIN-only admin nav */}
-        {isAdmin && !collapsed && (
+        {isAdmin && (
           <>
-            <SectionLabel>Admin</SectionLabel>
-            <NavItem
-              href="/admin"
-              icon={<ShieldCheck className="w-5 h-5" />}
-              label="Dashboard"
-              active={pathname === "/admin"}
-              collapsed={collapsed}
-            />
-            <NavItem
-              href="/tickets"
-              icon={<Ticket className="w-5 h-5" />}
-              label="Issues"
-              active={isTicketsActive}
-              collapsed={collapsed}
-            />
-            <NavItem
-              href="/admin/customers"
-              icon={<Building2 className="w-5 h-5" />}
-              label="Workspaces"
-              active={pathname.startsWith("/admin/customers")}
-              collapsed={collapsed}
-            />
-            <NavItem
-              href="/admin/users"
-              icon={<Users className="w-5 h-5" />}
-              label="Users"
-              active={pathname.startsWith("/admin/users")}
-              collapsed={collapsed}
-            />
-            <NavItem
-              href="/admin/ai-config"
-              icon={<Bot className="w-5 h-5" />}
-              label="AI Config"
-              active={pathname.startsWith("/admin/ai-config")}
-              collapsed={collapsed}
-            />
-            <NavItem
-              href="/admin/sla-config"
-              icon={<SlidersHorizontal className="w-5 h-5" />}
-              label="SLA Config"
-              active={pathname.startsWith("/admin/sla-config")}
-              collapsed={collapsed}
-            />
-            <NavItem
-              href="/admin/kb"
-              icon={<BookOpen className="w-5 h-5" />}
-              label="Knowledge Base"
-              active={pathname.startsWith("/admin/kb")}
-              collapsed={collapsed}
-            />
-            <NavItem
-              href="/admin/analytics"
-              icon={<BarChart3 className="w-5 h-5" />}
-              label="Analytics"
-              active={pathname.startsWith("/admin/analytics")}
-              collapsed={collapsed}
-            />
-            <NavItem
-              href="/admin/audit"
-              icon={<ClipboardList className="w-5 h-5" />}
-              label="Audit"
-              active={pathname.startsWith("/admin/audit")}
-              collapsed={collapsed}
-            />
-            <NavItem
-              href="/admin/settings"
-              icon={<Wrench className="w-5 h-5" />}
-              label="Settings"
-              active={pathname.startsWith("/admin/settings")}
-              collapsed={collapsed}
-            />
-          </>
-        )}
-
-        {isAdmin && collapsed && (
-          <>
-            <SectionLabel collapsed />
-            <NavItem href="/admin" icon={<ShieldCheck className="w-5 h-5" />} label="Dashboard" active={pathname === "/admin"} collapsed={collapsed} />
-            <NavItem href="/tickets" icon={<Ticket className="w-5 h-5" />} label="Issues" active={isTicketsActive} collapsed={collapsed} />
-            <NavItem href="/admin/customers" icon={<Building2 className="w-5 h-5" />} label="Workspaces" active={pathname.startsWith("/admin/customers")} collapsed={collapsed} />
-            <NavItem href="/admin/users" icon={<Users className="w-5 h-5" />} label="Users" active={pathname.startsWith("/admin/users")} collapsed={collapsed} />
-            <NavItem href="/admin/ai-config" icon={<Bot className="w-5 h-5" />} label="AI" active={pathname.startsWith("/admin/ai-config")} collapsed={collapsed} />
-            <NavItem href="/admin/sla-config" icon={<SlidersHorizontal className="w-5 h-5" />} label="SLA" active={pathname.startsWith("/admin/sla-config")} collapsed={collapsed} />
-            <NavItem href="/admin/kb" icon={<BookOpen className="w-5 h-5" />} label="KB" active={pathname.startsWith("/admin/kb")} collapsed={collapsed} />
-            <NavItem href="/admin/analytics" icon={<BarChart3 className="w-5 h-5" />} label="Analytics" active={pathname.startsWith("/admin/analytics")} collapsed={collapsed} />
-            <NavItem href="/admin/audit" icon={<ClipboardList className="w-5 h-5" />} label="Audit" active={pathname.startsWith("/admin/audit")} collapsed={collapsed} />
-            <NavItem href="/admin/settings" icon={<Wrench className="w-5 h-5" />} label="Settings" active={pathname.startsWith("/admin/settings")} collapsed={collapsed} />
+            <SectionLabel collapsed={collapsed}>Admin</SectionLabel>
+            <NavItem href="/admin" icon={<ShieldCheck className="w-4 h-4" />} label="Dashboard"
+              active={pathname === "/admin"} collapsed={collapsed} />
+            <NavItem href="/tickets" icon={<Ticket className="w-4 h-4" />} label="Issues"
+              active={isTicketsActive} collapsed={collapsed} />
+            <NavItem href="/admin/customers" icon={<Building2 className="w-4 h-4" />} label="Workspaces"
+              active={pathname.startsWith("/admin/customers")} collapsed={collapsed} />
+            <NavItem href="/admin/users" icon={<Users className="w-4 h-4" />} label="Users"
+              active={pathname.startsWith("/admin/users")} collapsed={collapsed} />
+            <NavItem href="/admin/ai-config" icon={<Bot className="w-4 h-4" />} label="AI Config"
+              active={pathname.startsWith("/admin/ai-config")} collapsed={collapsed} />
+            <NavItem href="/admin/sla-config" icon={<SlidersHorizontal className="w-4 h-4" />} label="SLA Config"
+              active={pathname.startsWith("/admin/sla-config")} collapsed={collapsed} />
+            <NavItem href="/admin/kb" icon={<BookOpen className="w-4 h-4" />} label="Knowledge Base"
+              active={pathname.startsWith("/admin/kb")} collapsed={collapsed} />
+            <NavItem href="/admin/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics"
+              active={pathname.startsWith("/admin/analytics")} collapsed={collapsed} />
+            <NavItem href="/admin/audit" icon={<ClipboardList className="w-4 h-4" />} label="Audit"
+              active={pathname.startsWith("/admin/audit")} collapsed={collapsed} />
+            <NavItem href="/admin/settings" icon={<Wrench className="w-4 h-4" />} label="Settings"
+              active={pathname.startsWith("/admin/settings")} collapsed={collapsed} />
           </>
         )}
       </nav>

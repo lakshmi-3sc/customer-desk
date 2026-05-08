@@ -69,7 +69,7 @@ export default function LeadReportsPage() {
   };
 
   return (
-    <div className="h-screen w-screen flex overflow-hidden bg-[#F4F5F7] dark:bg-slate-950">
+    <div className="h-screen w-screen flex overflow-hidden bg-[#F8F9FB] dark:bg-slate-950">
       <AppSidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar
@@ -218,7 +218,7 @@ export default function LeadReportsPage() {
                       <div className="mt-4 space-y-2">
                         {(data?.leaderboard ?? []).map((agent, idx) => (
                           <div key={agent.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60">
-                            <span className="text-sm w-6 text-center">{["🥇", "🥈", "🥉"][idx] ?? `#${idx + 1}`}</span>
+                            <span className="text-sm w-6 text-center">{["??", "??", "??"][idx] ?? `#${idx + 1}`}</span>
                             <div className="w-6 h-6 rounded-full bg-[#0747A6] text-white flex items-center justify-center text-[10px] font-bold">
                               {agent.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()}
                             </div>
