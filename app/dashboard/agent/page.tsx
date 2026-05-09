@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -13,6 +13,10 @@ import {
   ShieldAlert,
   Timer,
   Zap,
+  Search,
+  X,
+  MoreVertical,
+  MessageSquare,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useSession } from "next-auth/react";
@@ -81,21 +85,166 @@ const PRIORITY_BORDER: Record<string, string> = {
   LOW: "border-l-slate-300",
 };
 
+// Helper function to get activity time display and color
+function getActivityTimeInfo(updatedAt: string, nowMs: number): { text: string; color: string } {
+  const diffMs = nowMs - new Date(updatedAt).getTime();
+  const minutes = Math.floor(diffMs / 60000);
+  const hours = Math.floor(diffMs / 3600000);
+
+  if (minutes < 60) {
+    return { text: `${minutes}m ago`, color: "text-emerald-600 dark:text-emerald-400" };
+  } else if (hours < 6) {
+    return { text: `${hours}h ago`, color: "text-amber-600 dark:text-amber-400" };
+  } else {
+    return { text: `${hours}h ago`, color: "text-red-600 dark:text-red-400" };
+  }
+}
+
+// SearchFilterBar component
+function SearchFilterBar({
+  items,
+  onFilter,
+  searchQuery,
+  onSearchChange,
+  statusFilter,
+  onStatusChange,
+  priorityFilter,
+  onPriorityChange,
+}: {
+  items: IssueItem[];
+  onFilter: (filtered: IssueItem[]) => void;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
+  statusFilter: string;
+  onStatusChange: (status: string) => void;
+  priorityFilter: string;
+  onPriorityChange: (priority: string) => void;
+}) {
+  const filtered = useMemo(() => {
+    return items.filter((item) => {
+      const matchesSearch =
+        searchQuery === "" ||
+        item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.ticketKey?.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesStatus = statusFilter === "" || item.status === statusFilter;
+      const matchesPriority = priorityFilter === "" || item.priority === priorityFilter;
+
+      return matchesSearch && matchesStatus && matchesPriority;
+    });
+  }, [items, searchQuery, statusFilter, priorityFilter]);
+
+  useEffect(() => {
+    onFilter(filtered);
+  }, [filtered, onFilter]);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/70 p-2 dark:border-slate-800 dark:bg-slate-900/70">
+      <div className="relative min-w-[240px] flex-1">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <input
+          type="text"
+          placeholder="Search by title, customer, or ticket key..."
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          className="w-full rounded-md border border-slate-200 bg-white py-1.5 pl-9 pr-3 text-xs placeholder:text-slate-400 focus:border-[#0052CC] focus:outline-none focus:ring-1 focus:ring-[#0052CC]/30 dark:border-slate-700 dark:bg-slate-800 dark:placeholder:text-slate-500"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => onSearchChange("")}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      <select
+        value={statusFilter}
+        onChange={(e) => onStatusChange(e.target.value)}
+        className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-600 focus:border-[#0052CC] focus:outline-none focus:ring-1 focus:ring-[#0052CC]/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+      >
+        <option value="">All Status</option>
+        <option value="OPEN">Open</option>
+        <option value="ACKNOWLEDGED">Acknowledged</option>
+        <option value="IN_PROGRESS">In Progress</option>
+        <option value="RESOLVED">Resolved</option>
+      </select>
+
+      <select
+        value={priorityFilter}
+        onChange={(e) => onPriorityChange(e.target.value)}
+        className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-600 focus:border-[#0052CC] focus:outline-none focus:ring-1 focus:ring-[#0052CC]/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+      >
+        <option value="">All Priority</option>
+        <option value="CRITICAL">Critical</option>
+        <option value="HIGH">High</option>
+        <option value="MEDIUM">Medium</option>
+        <option value="LOW">Low</option>
+      </select>
+
+      <p className="whitespace-nowrap px-1 text-[10px] text-slate-500 dark:text-slate-400">
+        {filtered.length} of {items.length} tickets
+      </p>
+    </div>
+  );
+}
+
 function SlaChip({ slaDueAt, slaBreached, nowMs }: { slaDueAt: string | null; slaBreached: boolean; nowMs: number }) {
   if (!slaDueAt) return <span className="text-xs text-slate-300">-</span>;
 
   const diff = new Date(slaDueAt).getTime() - nowMs;
+
+  // Overdue status
   if (slaBreached || diff < 0) {
     const over = Math.abs(diff);
     const h = Math.floor(over / 3600000);
     const m = Math.floor((over % 3600000) / 60000);
-    return <span className="text-[11px] font-semibold text-red-600 dark:text-red-400">Overdue {h > 0 ? `${h}h ` : ""}{m}m</span>;
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <span className="text-[11px] font-semibold text-red-600 dark:text-red-400">
+          Overdue {h > 0 ? `${h}h ` : ""}{m}m
+        </span>
+        <div className="h-1 w-16 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+          <div className="h-full w-full bg-red-500" />
+        </div>
+      </div>
+    );
   }
 
   const h = Math.floor(diff / 3600000);
   const m = Math.floor((diff % 3600000) / 60000);
-  if (h < 2) return <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">{h}h {m}m left</span>;
-  return <span className="text-[11px] text-slate-400">{h > 24 ? `${Math.floor(h / 24)}d` : `${h}h`} left</span>;
+
+  // Determine color based on hours remaining
+  let color = "text-slate-400";
+  let bgColor = "bg-slate-200";
+  if (h < 1) {
+    color = "text-red-600 dark:text-red-400";
+    bgColor = "bg-red-400";
+  } else if (h < 6) {
+    color = "text-amber-600 dark:text-amber-400";
+    bgColor = "bg-amber-400";
+  } else {
+    color = "text-emerald-600 dark:text-emerald-400";
+    bgColor = "bg-emerald-400";
+  }
+
+  // Calculate progress percentage (assuming max 24 hours for the progress bar)
+  const totalHours = 24;
+  const remainingHours = Math.max(0, h + m / 60);
+  const progressPercent = Math.min(100, (remainingHours / totalHours) * 100);
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <span className={`text-[11px] font-semibold ${color}`}>
+        {h > 24 ? `${Math.floor(h / 24)}d` : h > 0 ? `${h}h ${m}m` : `${m}m`} left
+      </span>
+      <div className="h-1 w-16 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+        <div className={`h-full ${bgColor} transition-all`} style={{ width: `${progressPercent}%` }} />
+      </div>
+    </div>
+  );
 }
 
 function KpiCard({
@@ -154,14 +303,36 @@ function PanelHeader({
   );
 }
 
-function IssueRow({ issue, nowMs, onClick }: { issue: IssueItem; nowMs: number; onClick: () => void }) {
+function IssueRow({
+  issue,
+  nowMs,
+  onClick,
+  onStatusChange,
+}: {
+  issue: IssueItem;
+  nowMs: number;
+  onClick: () => void;
+  onStatusChange?: (ticketId: string, newStatus: string) => void;
+}) {
+  const [showActions, setShowActions] = useState(false);
+  const activityInfo = getActivityTimeInfo(issue.updatedAt, nowMs);
+
+  const handleStatusChange = (newStatus: string) => {
+    if (onStatusChange) {
+      onStatusChange(issue.id, newStatus);
+      setShowActions(false);
+    }
+  };
+
   return (
-    <button
-      onClick={onClick}
-      className={`group flex w-full items-center gap-2.5 rounded-md border border-slate-100 px-3 py-2 text-left transition-colors hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50 border-l-[3px] ${PRIORITY_BORDER[issue.priority] ?? "border-l-slate-200"}`}
+    <div
+      className={`group relative flex w-full items-center gap-2.5 rounded-md border border-slate-100 px-3 py-2 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50 border-l-[3px] ${PRIORITY_BORDER[issue.priority] ?? "border-l-slate-200"}`}
     >
       <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${PRIORITY_DOT[issue.priority] ?? "bg-slate-300"}`} />
-      <div className="min-w-0 flex-1">
+      <button
+        onClick={onClick}
+        className="min-w-0 flex-1 text-left"
+      >
         <div className="mb-0.5 flex items-center gap-1.5">
           <span className="font-mono text-[11px] font-semibold text-[#0052CC] dark:text-blue-400">
             {issue.ticketKey ?? issue.id.slice(0, 8)}
@@ -174,12 +345,57 @@ function IssueRow({ issue, nowMs, onClick }: { issue: IssueItem; nowMs: number; 
         <p className="truncate text-xs font-medium text-slate-800 transition-colors group-hover:text-[#0052CC] dark:text-slate-200 dark:group-hover:text-blue-400">
           {issue.title}
         </p>
+      </button>
+
+      {/* Activity Clock */}
+      <div className={`flex-shrink-0 whitespace-nowrap text-right text-[11px] font-medium ${activityInfo.color}`}>
+        {activityInfo.text}
       </div>
+
       <div className="flex-shrink-0 text-right">
         <SlaChip slaDueAt={issue.slaDueAt} slaBreached={issue.slaBreached} nowMs={nowMs} />
       </div>
+
+      {/* Quick Actions Dropdown */}
+      <div className="relative flex-shrink-0">
+        <button
+          onClick={() => setShowActions(!showActions)}
+          className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+          title="More actions"
+        >
+          <MoreVertical className="h-4 w-4" />
+        </button>
+
+        {showActions && (
+          <div className="absolute right-0 top-full z-40 mt-1 min-w-[160px] rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
+            <button
+              onClick={() => {
+                handleStatusChange("IN_PROGRESS");
+              }}
+              className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              Mark In Progress
+            </button>
+            <button
+              onClick={() => {
+                handleStatusChange("ACKNOWLEDGED");
+              }}
+              className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              Mark Acknowledged
+            </button>
+            <button
+              onClick={() => onClick()}
+              className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700 border-t border-slate-100 dark:border-slate-700"
+            >
+              View Details
+            </button>
+          </div>
+        )}
+      </div>
+
       <ChevronRight className="h-3 w-3 flex-shrink-0 text-slate-300" />
-    </button>
+    </div>
   );
 }
 
@@ -189,8 +405,14 @@ export default function AgentDashboard() {
   const [data, setData] = useState<AgentStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeView, setActiveView] = useState<"queue" | "recent">("queue");
+  const [activeView, setActiveView] = useState<"queue" | "needs" | "recent">("queue");
   const [nowMs, setNowMs] = useState(0);
+
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState("");
+  const [filteredItems, setFilteredItems] = useState<IssueItem[]>([]);
 
   const load = async () => {
     setLoading(true);
@@ -202,6 +424,34 @@ export default function AgentDashboard() {
       setNowMs(Date.now());
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const handleStatusChange = async (ticketId: string, newStatus: string) => {
+    try {
+      const res = await fetch(`/api/dashboard/tickets/${ticketId}/update`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (res.ok) {
+        // Optimistically update local state
+        if (data) {
+          const updatedData = {
+            ...data,
+            priorityQueue: data.priorityQueue.map((item) =>
+              item.id === ticketId ? { ...item, status: newStatus } : item
+            ),
+            recentIssues: data.recentIssues.map((item) =>
+              item.id === ticketId ? { ...item, status: newStatus } : item
+            ),
+          };
+          setData(updatedData);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to update ticket status:", error);
     }
   };
 
@@ -232,27 +482,43 @@ export default function AgentDashboard() {
           route: "/tickets?sla=overdue",
         },
         {
+          label: "Needs Response",
+          value: data.kpis.pendingResponse,
+          sub: "awaiting action",
+          icon: MessageSquare,
+          accent: "border-l-amber-400",
+          iconCls: "bg-amber-50 text-amber-500 dark:bg-amber-950/40",
+          route: null,
+        },
+        {
           label: "Resolved Today",
           value: data.kpis.resolvedToday,
-          sub: "closed today",
+          sub: data.kpis.avgResponseHrs > 0 ? `${data.kpis.avgResponseHrs}h avg` : "closed today",
           icon: CheckCircle,
           accent: "border-l-emerald-400",
           iconCls: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40",
           route: null,
         },
-        {
-          label: "Avg Response",
-          value: data.kpis.avgResponseHrs > 0 ? `${data.kpis.avgResponseHrs}h` : "-",
-          sub: "first response time",
-          icon: Clock,
-          accent: "border-l-blue-400",
-          iconCls: "bg-blue-50 text-blue-500 dark:bg-blue-950/40",
-          route: null,
-        },
       ]
     : [];
 
-  const queueItems = activeView === "queue" ? (data?.priorityQueue ?? []) : (data?.recentIssues ?? []);
+  // Update filteredItems when data or view changes
+  useEffect(() => {
+    const queueItems =
+      activeView === "queue"
+        ? (data?.priorityQueue ?? [])
+        : activeView === "needs"
+          ? (data?.priorityQueue ?? []).filter((issue) => issue.status === "ACKNOWLEDGED")
+          : (data?.recentIssues ?? []);
+    setFilteredItems(queueItems);
+  }, [data, activeView]);
+
+  const queueItems =
+    activeView === "queue"
+      ? (data?.priorityQueue ?? [])
+      : activeView === "needs"
+        ? (data?.priorityQueue ?? []).filter((issue) => issue.status === "ACKNOWLEDGED")
+        : (data?.recentIssues ?? []);
 
   const segBtn = (active: boolean) =>
     `px-3 py-1 text-xs rounded-md font-medium transition-colors ${
@@ -292,36 +558,6 @@ export default function AgentDashboard() {
         />
 
         <main className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
-          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">My Work</span>
-            </div>
-            <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
-            <div className="flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
-              {(["queue", "recent"] as const).map((view) => (
-                <button key={view} onClick={() => setActiveView(view)} className={segBtn(activeView === view)}>
-                  {view === "queue" ? "Priority Queue" : "Recent Activity"}
-                </button>
-              ))}
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <span className="rounded-md bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
-                {data?.kpis.pendingResponse ?? 0} pending response
-              </span>
-              <button
-                onClick={() => {
-                  setRefreshing(true);
-                  load();
-                }}
-                className="flex h-7 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-                Refresh
-              </button>
-            </div>
-          </div>
-
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {loading
               ? Array.from({ length: 4 }).map((_, i) => (
@@ -366,10 +602,10 @@ export default function AgentDashboard() {
           )}
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-            <div className="space-y-4 xl:col-span-2">
+            <div className="flex flex-col gap-4 xl:col-span-2">
               {!loading && (data?.aiInsights ?? []).length > 0 && (
-                <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                  <PanelHeader icon={Bot} title="AI Assist" meta="Ready responses" />
+                <div className="order-2 rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <PanelHeader icon={Bot} title="AI Assist" meta="Data-backed suggestions" />
                   <div className="space-y-2 p-3">
                     {data!.aiInsights.map((insight) => (
                       <div key={insight.id} className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 ${insightTone(insight.type)}`}>
@@ -384,7 +620,7 @@ export default function AgentDashboard() {
                             {insight.message}
                           </p>
                           <p className="mt-0.5 truncate text-[11px] text-slate-400">
-                            {insight.source} · {insight.waitHours}h since update · {insight.client.name} · {insight.title}
+                            {`${insight.source} - ${insight.waitHours}h since update - ${insight.client.name} - ${insight.title}`}
                           </p>
                         </div>
                         <button
@@ -399,40 +635,80 @@ export default function AgentDashboard() {
                 </div>
               )}
 
-              <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="order-1 rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <PanelHeader
-                  icon={activeView === "queue" ? ShieldAlert : Clock}
-                  title={activeView === "queue" ? "Priority Queue" : "Recent Activity"}
+                  icon={activeView === "recent" ? Clock : activeView === "needs" ? MessageSquare : ShieldAlert}
+                  title={activeView === "queue" ? "Priority Queue" : activeView === "needs" ? "Needs Response" : "Recent Activity"}
                   action={
-                    <button
-                      onClick={() => router.push("/tickets")}
-                      className="flex items-center gap-0.5 text-xs font-medium text-[#0052CC] hover:text-[#0747A6] dark:text-blue-400"
-                    >
-                      View all <ArrowUpRight className="h-3 w-3" />
-                    </button>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <div className="flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
+                        {(["queue", "needs", "recent"] as const).map((view) => (
+                          <button key={view} onClick={() => setActiveView(view)} className={segBtn(activeView === view)}>
+                            {view === "queue" ? "Priority" : view === "needs" ? "Needs Reply" : "Recent"}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => {
+                          setRefreshing(true);
+                          load();
+                        }}
+                        className="flex h-7 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      >
+                        <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+                        Refresh
+                      </button>
+                      <button
+                        onClick={() => router.push("/tickets")}
+                        className="flex items-center gap-0.5 text-xs font-medium text-[#0052CC] hover:text-[#0747A6] dark:text-blue-400"
+                      >
+                        View all <ArrowUpRight className="h-3 w-3" />
+                      </button>
+                    </div>
                   }
                 />
 
-                <div className="p-2">
+                <div className="p-3">
+                  {!loading && queueItems.length > 0 && (
+                    <div className="mb-3">
+                      <SearchFilterBar
+                        items={queueItems}
+                        onFilter={setFilteredItems}
+                        searchQuery={searchQuery}
+                        onSearchChange={setSearchQuery}
+                        statusFilter={statusFilter}
+                        onStatusChange={setStatusFilter}
+                        priorityFilter={priorityFilter}
+                        onPriorityChange={setPriorityFilter}
+                      />
+                    </div>
+                  )}
+
                   {loading ? (
                   <div className="space-y-1.5 p-2">
                     {Array.from({ length: 6 }).map((_, i) => (
                         <div key={i} className="h-11 animate-pulse rounded-md bg-slate-100 dark:bg-slate-800" />
                       ))}
                     </div>
-                  ) : queueItems.length === 0 ? (
+                  ) : filteredItems.length === 0 && queueItems.length === 0 ? (
                     <div className="py-10 text-center">
                       <CheckCircle className="mx-auto mb-2.5 h-9 w-9 text-emerald-300 dark:text-emerald-700" />
                       <p className="text-sm text-slate-400">No active issues - great work!</p>
                     </div>
+                  ) : filteredItems.length === 0 ? (
+                    <div className="py-8 text-center">
+                      <AlertCircle className="mx-auto mb-2.5 h-8 w-8 text-slate-300 dark:text-slate-700" />
+                      <p className="text-sm text-slate-400">No tickets match your filters</p>
+                    </div>
                   ) : (
                     <div className="space-y-1">
-                      {queueItems.map((issue) => (
+                      {filteredItems.map((issue) => (
                         <IssueRow
                           key={issue.id}
                           issue={issue}
                           nowMs={nowMs}
                           onClick={() => router.push(`/tickets/${issue.ticketKey ?? issue.id}`)}
+                          onStatusChange={handleStatusChange}
                         />
                       ))}
                     </div>

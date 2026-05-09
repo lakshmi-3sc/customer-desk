@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveTicketId } from "@/lib/resolve-ticket";
 import { extractMentions, findUserByMention, createNotification, isUserMentionable } from "@/lib/notifications";
 import type { EmailContext } from "@/lib/notifications";
+import type { Server } from "socket.io";
 
 export async function GET(
   req: NextRequest,
@@ -78,9 +79,13 @@ export async function POST(
       );
     }
 
-    // Verify the ticket exists (already resolved above, just confirm)
+    // Verify the ticket exists and fetch needed fields for notifications
     const ticket = await prisma.issue.findUnique({
       where: { id },
+      include: {
+        raisedBy: { select: { id: true, name: true, email: true } },
+        assignedTo: { select: { id: true, name: true, email: true } },
+      },
     });
 
     if (!ticket) {
@@ -123,6 +128,9 @@ export async function POST(
     const mentions = extractMentions(text);
     const commentPreview = text.length > 150 ? text.substring(0, 150) + "…" : text;
 
+    const notifiedUserIds = new Set<string>();
+
+    // Notify @mentioned users
     for (const mention of mentions) {
       const mentionedUser = await findUserByMention(mention);
       if (!mentionedUser || mentionedUser.id === session.user.id) continue;
@@ -135,6 +143,7 @@ export async function POST(
         continue;
       }
 
+      notifiedUserIds.add(mentionedUser.id);
       const mentionCtx: EmailContext = {
         ticketKey: ticket.ticketKey ?? "",
         ticketId: id,
@@ -155,6 +164,39 @@ export async function POST(
       );
     }
 
+    // Also notify ticket raiser and assigned agent (if not already mentioned)
+    const recipientsToNotify: string[] = [];
+
+    if (ticket.raisedBy?.id && ticket.raisedBy.id !== session.user.id && !notifiedUserIds.has(ticket.raisedBy.id)) {
+      recipientsToNotify.push(ticket.raisedBy.id);
+    }
+
+    if (ticket.assignedTo?.id && ticket.assignedTo.id !== session.user.id && !notifiedUserIds.has(ticket.assignedTo.id)) {
+      recipientsToNotify.push(ticket.assignedTo.id);
+    }
+
+    // Send comment notifications to relevant stakeholders
+    for (const userId of recipientsToNotify) {
+      const commentCtx: EmailContext = {
+        ticketKey: ticket.ticketKey ?? "",
+        ticketId: id,
+        ticketTitle: ticket.title,
+        ticketPriority: ticket.priority,
+        actorName: session.user.name ?? "Someone",
+        commentPreview,
+        isMention: false,
+      };
+
+      await createNotification(
+        userId,
+        "NEW_COMMENT",
+        `${session.user.name} commented on`,
+        `"${commentPreview}"`,
+        id,
+        commentCtx,
+      );
+    }
+
     // Save attachments if provided
     if (attachments && Array.isArray(attachments) && attachments.length > 0) {
       await prisma.issueAttachment.createMany({
@@ -167,6 +209,12 @@ export async function POST(
           fileType: att.type || 'application/octet-stream',
         })),
       });
+    }
+
+    // Broadcast the new comment to all users viewing this ticket via Socket.io
+    const io: Server | undefined = (global as any).__socketio;
+    if (io) {
+      io.to(`ticket:${id}`).emit("comment:added", comment);
     }
 
     return NextResponse.json({ comment }, { status: 201 });

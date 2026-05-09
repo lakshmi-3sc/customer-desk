@@ -361,6 +361,7 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
   const [slaCountdown, setSlaCountdown] = useState<string>('');
   const [mentionSuggestions, setMentionSuggestions] = useState<UserType[]>([]);
   const [showMentions, setShowMentions] = useState(false);
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(-1);
 
   // Lead-specific state
   const [escalationNote, setEscalationNote] = useState('');
@@ -486,10 +487,29 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
     socket.on("ticket:updated", (updated: Ticket) => {
       setTicket((prev) => (prev?.id === updated.id ? updated : prev));
     });
+    // Listen for new comments - socket is the single source of truth
+    socket.on("comment:added", (newComment: Comment) => {
+      setComments((prev) => {
+        // Prevent duplicates by checking if ID already exists
+        if (prev.some((c) => c.id === newComment.id)) {
+          return prev;
+        }
+
+        // Add new comment to the list
+        if (newComment.parentId) {
+          // It's a reply - add it to the parent's replies
+          return addReplyToTree(prev, newComment);
+        } else {
+          // It's a top-level comment
+          return [...prev, { ...newComment, replies: [] }];
+        }
+      });
+    });
     return () => {
       socket.emit("leave:ticket", roomId);
       socket.off("connect", joinRoom);
       socket.off("ticket:updated");
+      socket.off("comment:added");
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticket?.id]);
@@ -514,13 +534,14 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
   const handleCommentChange = (text: string) => {
     setCommentText(text);
     const lastAtIndex = text.lastIndexOf('@');
-    if (lastAtIndex === -1) { setShowMentions(false); return; }
+    if (lastAtIndex === -1) { setShowMentions(false); setSelectedMentionIndex(-1); return; }
     const afterAt = text.substring(lastAtIndex + 1);
-    if (afterAt.includes(' ')) { setShowMentions(false); return; }
+    if (afterAt.includes(' ')) { setShowMentions(false); setSelectedMentionIndex(-1); return; }
     const query = afterAt.toLowerCase();
     const filtered = mentionableUsers.filter(u => u.name.toLowerCase().includes(query)).slice(0, 5);
     setMentionSuggestions(filtered);
     setShowMentions(filtered.length > 0);
+    setSelectedMentionIndex(-1); // Reset selection when list changes
   };
 
   const insertMention = (userName: string) => {
@@ -528,6 +549,31 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
     const beforeMention = commentText.substring(0, lastAtIndex);
     setCommentText(beforeMention + '@' + userName + ' ');
     setShowMentions(false);
+    setSelectedMentionIndex(-1);
+  };
+
+  const handleCommentKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Handle mention dropdown keyboard navigation
+    if (showMentions && mentionSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedMentionIndex((prev) =>
+          prev < mentionSuggestions.length - 1 ? prev + 1 : 0
+        );
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedMentionIndex((prev) =>
+          prev > 0 ? prev - 1 : mentionSuggestions.length - 1
+        );
+      } else if (e.key === 'Enter' && selectedMentionIndex >= 0) {
+        e.preventDefault();
+        insertMention(mentionSuggestions[selectedMentionIndex].name);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowMentions(false);
+        setSelectedMentionIndex(-1);
+      }
+    }
   };
 
   const handleCommentFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -558,9 +604,8 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
         }),
       });
       if (!response.ok) throw new Error("Failed to post comment");
-      const data = await response.json();
-      const comment = data.comment as Comment;
-      setComments((prev) => [...prev, { ...comment, replies: [] }]);
+      // Don't add comment here - let socket listener handle it to avoid duplicates
+      // Comment will appear via socket.io "comment:added" event
       setCommentText("");
       setCommentAttachments([]);
     } catch (error) {
@@ -900,6 +945,7 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                               placeholder={is3SCTeam ? "Reply to customer... (type @ to mention)" : "Add a comment..."}
                               value={commentText}
                               onChange={(e) => handleCommentChange(e.target.value)}
+                              onKeyDown={handleCommentKeyDown}
                               rows={3}
                               className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0052CC] focus:border-[#0052CC] resize-none"
                             />
@@ -911,15 +957,23 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                               className="hidden"
                             />
                             {showMentions && mentionSuggestions.length > 0 && (
-                              <div className="absolute bottom-full left-0 mb-1 w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md shadow-lg z-10">
-                                {mentionSuggestions.map((user) => (
+                              <div className="absolute top-full left-0 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md shadow-lg z-50 max-h-48 overflow-y-auto">
+                                {mentionSuggestions.map((user, index) => (
                                   <button
                                     key={user.id}
                                     type="button"
                                     onClick={() => insertMention(user.name)}
-                                    className="w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2"
+                                    className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors ${
+                                      selectedMentionIndex === index
+                                        ? 'bg-[#0052CC] text-white dark:bg-[#0052CC] dark:text-white'
+                                        : 'text-slate-900 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                    }`}
                                   >
-                                    <div className="w-5 h-5 rounded-full bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-slate-300 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
+                                      selectedMentionIndex === index
+                                        ? 'bg-white/20 text-white'
+                                        : 'bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-slate-300'
+                                    }`}>
                                       {user.name.substring(0, 2).toUpperCase()}
                                     </div>
                                     <span>{user.name}</span>
