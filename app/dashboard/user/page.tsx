@@ -10,10 +10,12 @@ import {
   MessageSquare,
   BookOpen,
   Bell,
+  Plus,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
+import { Button } from "@/components/ui/button";
 import { CustomerUserInsights } from "@/components/dashboard/CustomerUserInsights";
 import { CustomerAdminInsights } from "@/components/dashboard/CustomerAdminInsights";
 
