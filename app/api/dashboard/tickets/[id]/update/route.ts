@@ -163,8 +163,12 @@ export async function PUT(
       },
     });
 
-    // Generate embedding if ticket was just resolved (async, non-blocking)
-    if (status === "RESOLVED" && !ticket.embedding) {
+    // Generate embedding if ticket was just resolved (async, non-blocking).
+    // The pgvector field is Unsupported in Prisma, so check it through raw SQL.
+    const shouldGenerateEmbedding =
+      status === "RESOLVED" && !(await ticketHasEmbedding(id));
+
+    if (shouldGenerateEmbedding) {
       // Run embedding generation in background without awaiting
       generateAndStoreEmbeddingAsync(id, updatedTicket.title, updatedTicket.description).catch(
         (error) => console.error(`Failed to generate embedding for ticket ${id}:`, error)
@@ -249,6 +253,17 @@ export async function PUT(
   }
 }
 
+async function ticketHasEmbedding(ticketId: string): Promise<boolean> {
+  const rows = await prisma.$queryRaw<Array<{ hasEmbedding: boolean }>>`
+    SELECT embedding IS NOT NULL AS "hasEmbedding"
+    FROM "Issue"
+    WHERE id = ${ticketId}
+    LIMIT 1
+  `;
+
+  return rows[0]?.hasEmbedding ?? false;
+}
+
 /**
  * Generate and store embedding for a resolved ticket
  * This is an async function called in the background (non-blocking)
@@ -266,15 +281,16 @@ async function generateAndStoreEmbeddingAsync(
     // Generate embedding using Anthropic API
     const embedding = await generateEmbedding(text);
 
-    // Store in database as JSON string (pgvector accepts JSON)
-    await prisma.issue.update({
-      where: { id: ticketId },
-      data: {
-        embedding: JSON.stringify(embedding),
-        embeddingModel: "claude-3-5-sonnet-20241022",
-        embeddingAt: new Date(),
-      },
-    });
+    const vector = `[${embedding.join(",")}]`;
+
+    await prisma.$executeRaw`
+      UPDATE "Issue"
+      SET
+        embedding = ${vector}::vector,
+        "embeddingModel" = ${"claude-3-5-sonnet-20241022"},
+        "embeddingAt" = ${new Date()}
+      WHERE id = ${ticketId}
+    `;
 
     console.log(`✓ Generated embedding for ticket ${ticketId}`);
   } catch (error) {

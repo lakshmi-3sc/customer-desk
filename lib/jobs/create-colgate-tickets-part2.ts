@@ -1,5 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { generateTicketKey } from "@/lib/ticket-key";
+import type { IssueCategory, IssuePriority, IssueStatus } from "@prisma/client";
+
+type TicketTemplate = {
+  projectId?: string;
+  title: string;
+  description: string;
+  category: IssueCategory;
+  priority: IssuePriority;
+};
 
 async function createColgateTicketsPart2() {
   console.log("🎫 Creating 6 additional tickets for Colgate Palmolive projects...\n");
@@ -50,7 +59,7 @@ async function createColgateTicketsPart2() {
     return;
   }
 
-  const additionalTickets = [
+  const additionalTickets: TicketTemplate[] = [
     {
       projectId: projects.find((p) => p.name === "Replenishment Planning")?.id,
       title: "Integration with third-party logistics platform fails intermittently",
@@ -102,15 +111,15 @@ async function createColgateTicketsPart2() {
   ];
 
   let created = 0;
-  const statusDistribution = ["OPEN", "ACKNOWLEDGED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+  const statusDistribution: IssueStatus[] = ["OPEN", "ACKNOWLEDGED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
   let ticketIndex = 0;
 
   for (const template of additionalTickets) {
     if (!template.projectId) continue;
 
     const status = statusDistribution[ticketIndex % statusDistribution.length];
-    const priority = template.priority as any;
-    const category = template.category as any;
+    const priority = template.priority;
+    const category = template.category;
 
     const createdAt = new Date(Date.now() - Math.random() * 20 * 24 * 60 * 60 * 1000);
     const slaPriorityMap: Record<string, number> = {

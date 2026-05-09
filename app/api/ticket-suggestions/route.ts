@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
-import { generateEmbedding, rankBySimilarity } from "@/lib/embeddings";
+import { generateEmbedding } from "@/lib/embeddings";
 import { classifyIssue } from "@/lib/ai/classify-issue";
 import { Anthropic } from "@anthropic-ai/sdk";
 
@@ -14,11 +14,11 @@ interface Candidate {
   id: string;
   type: "ticket" | "article";
   title: string;
-  slug?: string;
+  slug?: string | null;
   content: string;
-  category?: string;
+  category?: string | null;
   status?: string;
-  resolvedAt?: string;
+  resolvedAt?: Date | string | null;
   resolution?: string;
   embedding?: string;
   similarity?: number;
@@ -64,7 +64,6 @@ async function getFullTextSearchResults(
         status: true,
         resolvedAt: true,
         clientId: true,
-        embedding: true,
         comments: {
           select: {
             id: true,
@@ -99,10 +98,9 @@ async function getFullTextSearchResults(
         id: t.id,
         title: t.title,
         content: t.description,
-        type: "ticket",
+        type: "ticket" as const,
         status: t.status,
         resolvedAt: t.resolvedAt,
-        embedding: t.embedding,
         resolution:
           t.comments && t.comments.length > 0
             ? t.comments[0].content
@@ -122,13 +120,11 @@ async function getFullTextSearchResults(
       },
       select: {
         id: true,
-        slug: true,
         title: true,
         content: true,
         category: true,
         clientId: true,
         isInternal: true,
-        embedding: true,
         createdAt: true,
       },
       take: 50,
@@ -159,12 +155,11 @@ async function getFullTextSearchResults(
       })
       .map((a) => ({
         id: a.id,
-        slug: a.slug,
+        slug: a.id,
         title: a.title,
         content: a.content,
-        type: "article",
+        type: "article" as const,
         category: a.category,
-        embedding: a.embedding,
       }))
       .slice(0, 15);
   } catch (err) {
@@ -312,7 +307,7 @@ async function semanticRankCandidates(
         const allArticles = await prisma.$queryRaw<Array<{ id: string; slug: string; title: string; content: string; category: string | null; clientId: string | null; similarity: number }>>`
           SELECT
             id,
-            slug,
+            id AS slug,
             title,
             content,
             category,

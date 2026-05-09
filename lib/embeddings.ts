@@ -1,13 +1,16 @@
 /**
- * Real semantic embeddings using Anthropic's embedding model
+ * Real semantic embeddings using the configured embedding endpoint
  * Generates 1024-dimensional vectors for pgvector similarity search
  */
 
-import { Anthropic } from "@anthropic-ai/sdk";
+const ANTHROPIC_VERSION = "2023-06-01";
+const EMBEDDING_MODEL = process.env.ANTHROPIC_EMBEDDING_MODEL ?? "claude-3-5-sonnet-20241022";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+type EmbeddingResponse = {
+  embedding?: number[];
+  embeddings?: number[][];
+  data?: Array<{ embedding?: number[] }>;
+};
 
 /**
  * Generate embedding for text using Anthropic's embedding model
@@ -23,16 +26,29 @@ export async function generateEmbedding(text: string): Promise<number[]> {
   }
 
   try {
-    const response = await anthropic.messages.embeddings.create({
-      model: "claude-3-5-sonnet-20241022",
-      input: text.trim(),
+    const response = await fetch("https://api.anthropic.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": ANTHROPIC_VERSION,
+      },
+      body: JSON.stringify({
+        model: EMBEDDING_MODEL,
+        input: text.trim(),
+      }),
     });
 
-    if (response.embedding) {
-      if (!Array.isArray(response.embedding)) {
-        throw new Error("Invalid embedding response format");
-      }
-      return response.embedding;
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`Embedding API failed (${response.status}): ${detail}`);
+    }
+
+    const data = (await response.json()) as EmbeddingResponse;
+    const embedding = data.embedding ?? data.embeddings?.[0] ?? data.data?.[0]?.embedding;
+
+    if (Array.isArray(embedding) && embedding.every((value) => typeof value === "number")) {
+      return embedding;
     }
 
     throw new Error("No embedding returned from Anthropic API");

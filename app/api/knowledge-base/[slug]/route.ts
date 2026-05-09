@@ -6,8 +6,8 @@ import { authOptions } from "@/auth";
 export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
     const { slug } = await params;
-    const article = await prisma.knowledgeBase.findFirst({
-      where: { slug },
+    const article = await prisma.knowledgeBase.findUnique({
+      where: { id: slug },
       include: {
         createdBy: { select: { name: true, id: true } },
       },
@@ -37,8 +37,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const body = await request.json();
     const { title, content, category } = body;
 
-    const existingArticle = await prisma.knowledgeBase.findFirst({
-      where: { slug },
+    const existingArticle = await prisma.knowledgeBase.findUnique({
+      where: { id: slug },
       select: { id: true },
     });
 

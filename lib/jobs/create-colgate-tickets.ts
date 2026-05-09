@@ -1,5 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { generateTicketKey } from "@/lib/ticket-key";
+import type { IssueCategory, IssuePriority, IssueStatus } from "@prisma/client";
+
+type TicketTemplate = {
+  projectId?: string;
+  title: string;
+  description: string;
+  category: IssueCategory;
+  priority: IssuePriority;
+};
 
 async function createColgateTickets() {
   console.log("🎫 Creating 50 tickets for Colgate Palmolive projects...\n");
@@ -50,7 +59,7 @@ async function createColgateTickets() {
     return;
   }
 
-  const ticketTemplates = [
+  const ticketTemplates: TicketTemplate[] = [
     // REPLENISHMENT PLANNING PROJECT TICKETS
     {
       projectId: projects.find((p) => p.name === "Replenishment Planning")?.id,
@@ -411,7 +420,7 @@ async function createColgateTickets() {
   ];
 
   let created = 0;
-  const statusDistribution = ["OPEN", "ACKNOWLEDGED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+  const statusDistribution: IssueStatus[] = ["OPEN", "ACKNOWLEDGED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
   let ticketIndex = 0;
 
   for (const template of ticketTemplates) {
@@ -419,8 +428,8 @@ async function createColgateTickets() {
 
     // Distribute statuses evenly
     const status = statusDistribution[ticketIndex % statusDistribution.length];
-    const priority = template.priority as any;
-    const category = template.category as any;
+    const priority = template.priority;
+    const category = template.category;
 
     // Calculate SLA due date based on priority
     const createdAt = new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000); // Random time within last 30 days

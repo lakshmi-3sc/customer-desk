@@ -10,6 +10,33 @@ import { batchGenerateEmbeddings } from "@/lib/embeddings";
 
 const BATCH_SIZE = 10; // Process 10 items at a time (OpenAI batch limit)
 const DELAY_BETWEEN_BATCHES = 1000; // 1 second between batches for rate limiting
+const EMBEDDING_MODEL = process.env.ANTHROPIC_EMBEDDING_MODEL ?? "claude-3-5-sonnet-20241022";
+
+async function storeIssueEmbedding(id: string, embedding: number[]) {
+  const vector = `[${embedding.join(",")}]`;
+
+  await prisma.$executeRaw`
+    UPDATE "Issue"
+    SET
+      embedding = ${vector}::vector,
+      "embeddingModel" = ${EMBEDDING_MODEL},
+      "embeddingAt" = ${new Date()}
+    WHERE id = ${id}
+  `;
+}
+
+async function storeKnowledgeBaseEmbedding(id: string, embedding: number[]) {
+  const vector = `[${embedding.join(",")}]`;
+
+  await prisma.$executeRaw`
+    UPDATE "KnowledgeBase"
+    SET
+      embedding = ${vector}::vector,
+      "embeddingModel" = ${EMBEDDING_MODEL},
+      "embeddingAt" = ${new Date()}
+    WHERE id = ${id}
+  `;
+}
 
 async function backfillTicketEmbeddings() {
   console.log("🎫 Starting backfill for resolved tickets...");
@@ -54,14 +81,7 @@ async function backfillTicketEmbeddings() {
         // Store embeddings in database
         for (let j = 0; j < batch.length; j++) {
           try {
-            await prisma.issue.update({
-              where: { id: batch[j].id },
-              data: {
-                embedding: JSON.stringify(embeddings[j]),
-                embeddingModel: "claude-3-5-sonnet-20241022",
-                embeddingAt: new Date(),
-              },
-            });
+            await storeIssueEmbedding(batch[j].id, embeddings[j]);
             processed++;
             console.log(
               `  ✓ ${processed}/${tickets.length} - ${batch[j].title.substring(0, 40)}...`
@@ -136,14 +156,7 @@ async function backfillKBEmbeddings() {
         // Store embeddings in database
         for (let j = 0; j < batch.length; j++) {
           try {
-            await prisma.knowledgeBase.update({
-              where: { id: batch[j].id },
-              data: {
-                embedding: JSON.stringify(embeddings[j]),
-                embeddingModel: "claude-3-5-sonnet-20241022",
-                embeddingAt: new Date(),
-              },
-            });
+            await storeKnowledgeBaseEmbedding(batch[j].id, embeddings[j]);
             processed++;
             console.log(
               `  ✓ ${processed}/${articles.length} - ${batch[j].title.substring(0, 40)}...`

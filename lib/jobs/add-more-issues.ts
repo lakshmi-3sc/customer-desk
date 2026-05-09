@@ -1,5 +1,18 @@
 import { prisma } from "@/lib/prisma";
 import { generateTicketKey } from "@/lib/ticket-key";
+import type { IssueCategory, IssuePriority, IssueStatus } from "@prisma/client";
+
+type SeedIssue = {
+  title: string;
+  description: string;
+  category: IssueCategory;
+  priority: IssuePriority;
+  status: IssueStatus;
+  clientId: string;
+  projectId: string;
+  raisedById: string;
+  assignedToId: string | null | undefined;
+};
 
 async function addMoreIssues() {
   console.log("📝 Adding more diverse issues...\n");
@@ -23,7 +36,7 @@ async function addMoreIssues() {
     return;
   }
 
-  const issues = [
+  const issues: SeedIssue[] = [
     {
       title: "Database connection pool exhausted - production down",
       description: "Production unable to establish DB connections. All users locked out.",

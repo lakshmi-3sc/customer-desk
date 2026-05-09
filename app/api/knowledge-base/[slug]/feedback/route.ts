@@ -16,8 +16,9 @@ export async function POST(
     const { helpful } = await request.json();
     const { slug } = await params;
 
-    const article = await prisma.knowledgeBase.findFirst({
-      where: { slug },
+    const article = await prisma.knowledgeBase.findUnique({
+      where: { id: slug },
+      select: { id: true },
     });
 
     if (!article) {

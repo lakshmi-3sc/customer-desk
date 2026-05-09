@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
 
     if (slug) {
       const article = await prisma.knowledgeBase.findFirst({
-        where: { ...where, slug },
+        where: { ...where, id: slug },
         include: { createdBy: { select: { name: true } } },
       });
       if (!article) {
@@ -107,18 +107,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Title and category required" }, { status: 400 });
     }
 
-    // Generate slug from title
-    const slug = title
-      .toLowerCase()
-      .replace(/[^\w\s-]/g, "")
-      .replace(/\s+/g, "-")
-      .replace(/-+/g, "-")
-      .substring(0, 100);
-
     const article = await prisma.knowledgeBase.create({
       data: {
         title,
-        slug: slug + "-" + Date.now(), // Ensure uniqueness
         content: content || "",
         category,
         isPublished: true,
