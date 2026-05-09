@@ -23,8 +23,15 @@ export async function GET() {
       orderBy: [{ slaDueAt: "asc" }],
       select: {
         id: true, ticketKey: true, title: true, status: true, priority: true,
+        aiSummary: true,
         slaBreached: true, slaBreachRisk: true, slaDueAt: true, updatedAt: true, createdAt: true,
         client: { select: { id: true, name: true } },
+        comments: {
+          where: { isAiSuggested: true },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { id: true },
+        },
       },
     }),
     prisma.issue.findMany({
@@ -67,14 +74,76 @@ export async function GET() {
     return due >= now && due <= in4h;
   });
 
-  // AI insights: issues with no update in 6+ hours
   const aiInsights = assigned
-    .filter((i) => new Date(i.updatedAt) < sixHoursAgo)
-    .slice(0, 3)
     .map((i) => {
       const waitHours = Math.floor((now.getTime() - new Date(i.updatedAt).getTime()) / 3600000);
-      return { id: i.id, ticketKey: i.ticketKey, title: i.title, waitHours, priority: i.priority, client: i.client };
-    });
+      const dueAt = i.slaDueAt ? new Date(i.slaDueAt) : null;
+      const hasAiDraft = i.comments.length > 0 || Boolean(i.aiSummary);
+
+      if (hasAiDraft) {
+        return {
+          id: i.id,
+          ticketKey: i.ticketKey,
+          title: i.title,
+          waitHours,
+          priority: i.priority,
+          client: i.client,
+          type: "ai_draft",
+          message: "AI draft or summary available",
+          source: i.comments.length > 0 ? "suggested comment" : "ticket summary",
+        };
+      }
+
+      if (i.slaBreached || (dueAt && dueAt < now)) {
+        return {
+          id: i.id,
+          ticketKey: i.ticketKey,
+          title: i.title,
+          waitHours,
+          priority: i.priority,
+          client: i.client,
+          type: "sla_breach",
+          message: "SLA breached - needs immediate response",
+          source: "SLA clock",
+        };
+      }
+
+      if (i.slaBreachRisk || (dueAt && dueAt >= now && dueAt <= in4h)) {
+        return {
+          id: i.id,
+          ticketKey: i.ticketKey,
+          title: i.title,
+          waitHours,
+          priority: i.priority,
+          client: i.client,
+          type: "sla_risk",
+          message: "SLA risk in the next 4 hours",
+          source: "SLA clock",
+        };
+      }
+
+      if (new Date(i.updatedAt) < sixHoursAgo) {
+        return {
+          id: i.id,
+          ticketKey: i.ticketKey,
+          title: i.title,
+          waitHours,
+          priority: i.priority,
+          client: i.client,
+          type: "follow_up",
+          message: "No update for 6+ hours - review next action",
+          source: "ticket activity",
+        };
+      }
+
+      return null;
+    })
+    .filter((insight): insight is NonNullable<typeof insight> => insight !== null)
+    .sort((a, b) => {
+      const order: Record<string, number> = { ai_draft: 0, sla_breach: 1, sla_risk: 2, follow_up: 3 };
+      return (order[a.type] ?? 9) - (order[b.type] ?? 9) || b.waitHours - a.waitHours;
+    })
+    .slice(0, 3);
 
   // Avg resolution time in hours from today's resolved issues
   let avgResponseHrs = 0;

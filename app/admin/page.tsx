@@ -226,13 +226,7 @@ export default function AdminDashboard() {
               <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">Admin Dashboard</span>
             </div>
           }
-          right={
-            <button onClick={refresh} disabled={refreshing}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-300 transition-all disabled:opacity-50">
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
-          }
+          right={undefined}
         />
 
         <main className="flex-1 overflow-y-auto px-6 py-5 space-y-4">

@@ -202,7 +202,7 @@ async function notifyInternalTeamOfNewTicket(params: {
 
   const internalUsers = await prisma.user.findMany({
     where: {
-      role: { in: ["THREESC_ADMIN", "THREESC_LEAD", "THREESC_AGENT"] },
+      role: { in: ["THREESC_ADMIN", "THREESC_LEAD"] },
       isActive: true,
     },
     select: { email: true },

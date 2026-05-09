@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 
 interface ClientBranding {
   id: string;
@@ -20,37 +21,55 @@ interface WorkspaceContextType {
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
+  const { status } = useSession();
   const [currentWorkspace, setCurrentWorkspace] = useState<ClientBranding | null>(null);
   const [workspaces, setWorkspaces] = useState<ClientBranding[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (status === "loading") return;
+
+    if (status === "unauthenticated") {
+      setCurrentWorkspace(null);
+      setWorkspaces([]);
+      setLoading(false);
+      localStorage.removeItem("current-workspace");
+      return;
+    }
+
     const loadWorkspaces = async () => {
+      setLoading(true);
       try {
         const res = await fetch("/api/workspaces");
         if (res.ok) {
           const data = await res.json();
-          setWorkspaces(data.workspaces || []);
+          const availableWorkspaces = data.workspaces || [];
+          setWorkspaces(availableWorkspaces);
 
           const saved = localStorage.getItem("current-workspace");
-          const workspace = saved
-            ? data.workspaces.find((w: ClientBranding) => w.id === saved)
-            : data.workspaces[0];
+          const workspace =
+            availableWorkspaces.find((w: ClientBranding) => w.id === saved) ??
+            availableWorkspaces[0];
 
           if (workspace) {
             setCurrentWorkspace(workspace);
             localStorage.setItem("current-workspace", workspace.id);
+          } else {
+            setCurrentWorkspace(null);
+            localStorage.removeItem("current-workspace");
           }
         }
       } catch (error) {
         console.error("Failed to load workspaces:", error);
+        setCurrentWorkspace(null);
+        setWorkspaces([]);
       } finally {
         setLoading(false);
       }
     };
 
     loadWorkspaces();
-  }, []);
+  }, [status]);
 
   const switchWorkspace = (clientId: string) => {
     const workspace = workspaces.find((w) => w.id === clientId);

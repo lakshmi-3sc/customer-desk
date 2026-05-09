@@ -188,21 +188,36 @@ export async function PUT(
 
     // Create notifications for status changes
     if (status !== undefined && status !== ticket.status) {
-      const recipients = await getStatusChangeRecipients(id, currentUser.id);
       const statusCtx: EmailContext = {
         ...baseCtx,
         fromStatus: ticket.status,
         toStatus: status,
       };
-      for (const recipientId of recipients) {
-        await createNotification(
-          recipientId,
-          "STATUS_UPDATED",
-          `Status changed to ${status}`,
-          `${updatedTicket.title} - ${ticket.status} → ${status}`,
-          id,
-          statusCtx,
-        );
+
+      if (status === "RESOLVED" || status === "CLOSED") {
+        // Notify the client who raised the ticket — they care most about resolution
+        if (ticket.raisedById !== currentUser.id) {
+          await createNotification(
+            ticket.raisedById,
+            "ISSUE_RESOLVED",
+            `Your ticket has been ${status.toLowerCase()}`,
+            `${updatedTicket.title} — ${ticket.status} → ${status}`,
+            id,
+            statusCtx,
+          );
+        }
+      } else {
+        // For other status changes, only notify the assigned agent (if not the one making the change)
+        if (updatedTicket.assignedTo && updatedTicket.assignedTo.id !== currentUser.id) {
+          await createNotification(
+            updatedTicket.assignedTo.id,
+            "STATUS_UPDATED",
+            `Status changed to ${status.replace(/_/g, " ")}`,
+            `${updatedTicket.title} — ${ticket.status} → ${status}`,
+            id,
+            statusCtx,
+          );
+        }
       }
     }
 

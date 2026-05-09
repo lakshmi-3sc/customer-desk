@@ -211,20 +211,7 @@ export default function InternalDashboard() {
               </p>
             </div>
           }
-          right={
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => { fetchKPI(); fetchTickets(); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors"
-              >
-                <RefreshCw className="w-3 h-3" />
-                Refresh
-              </button>
-              <span className="text-xs text-slate-400 dark:text-slate-600">
-                {lastRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-              </span>
-            </div>
-          }
+          right={undefined}
         />
 
         {/* Content */}

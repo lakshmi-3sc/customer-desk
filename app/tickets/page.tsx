@@ -261,48 +261,58 @@ function TicketsContent() {
                 Overview
               </button>
               <ChevronRight className="w-4 h-4 text-slate-400" />
-              <span className="text-slate-700 dark:text-slate-300 font-medium">Issues</span>
+              <span className="text-slate-700 dark:text-slate-300 font-medium">
+                {isClientUser ? 'My Issues' : 'Issues'}
+              </span>
             </div>
+          }
+          right={
+            isClientUser ? (
+              <button
+                onClick={() => router.push('/create-ticket')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[#0052CC] hover:bg-[#0747A6] text-white rounded-lg transition-colors shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                New Issue
+              </button>
+            ) : undefined
           }
         />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Page header + tabs */}
-          <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 pt-4 pb-0">
-            <div className="flex items-center justify-between mb-3">
-              <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                {isClientUser ? 'My Issues' : 'Issues'}
-              </h1>
-              {isClientUser && (
-                <button
-                  onClick={() => router.push('/create-ticket')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[#0052CC] hover:bg-[#0747A6] text-white rounded-lg transition-colors shadow-sm"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  New Issue
-                </button>
-              )}
-            </div>
-            <div className="flex gap-0 -mb-px">
-              {STATUS_TABS.map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => handleTabChange(tab.key)}
-                  className={`px-4 py-2 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
-                    activeTab === tab.key
-                      ? 'border-[#0052CC] text-[#0052CC] dark:text-blue-400 dark:border-blue-400'
-                      : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+          {/* Tabs + filter bar merged into one compact header */}
+          <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-5 pt-2 pb-0">
+            {/* Tab row */}
+            <div className="flex items-center justify-between -mb-px">
+              <div className="flex gap-0">
+                {STATUS_TABS.map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => handleTabChange(tab.key)}
+                    className={`px-3.5 py-2 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
+                      activeTab === tab.key
+                        ? 'border-[#0052CC] text-[#0052CC] dark:text-blue-400 dark:border-blue-400'
+                        : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={exportCSV}
+                title="Export CSV"
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors mb-1"
+              >
+                <Download className="w-3 h-3" />
+                Export
+              </button>
             </div>
           </div>
 
-          <main className="flex-1 overflow-y-auto p-5">
+          <main className="flex-1 overflow-y-auto px-5 py-3">
             {/* Filter bar */}
-            <div className="flex flex-wrap items-center gap-2 mb-4">
+            <div className="flex flex-wrap items-center gap-1.5 mb-3">
               <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} className={selectCls}>
                 <option value="">Priority</option>
                 <option value="CRITICAL">Critical</option>
@@ -356,26 +366,15 @@ function TicketsContent() {
               </div>
 
               {hasActiveFilters && (
-                <button onClick={clearFilters} className="flex items-center gap-1 px-2 py-1.5 text-xs text-slate-400 hover:text-red-500 transition-colors">
+                <button onClick={clearFilters} className="flex items-center gap-1 px-2 py-1 text-xs text-slate-400 hover:text-red-500 transition-colors">
                   <X className="w-3 h-3" />Clear
                 </button>
               )}
-
-              <div className="ml-auto">
-                <button
-                  onClick={exportCSV}
-                  title="Export CSV"
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Export
-                </button>
-              </div>
             </div>
 
             {/* Active alert filter chips */}
             {(filterPriority || filterUnassigned || filterSlaAtRisk || filterSlaBreached || filterUnresponded) && (
-              <div className="flex items-center gap-2 flex-wrap mb-3 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40">
+              <div className="flex items-center gap-2 flex-wrap mb-2 px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40">
                 <span className="text-xs font-medium text-amber-600 dark:text-amber-400">Active filter:</span>
                 {filterPriority && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">Priority: {filterPriority}</span>}
                 {filterUnassigned && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">Unassigned</span>}
@@ -435,93 +434,74 @@ function TicketsContent() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full">
                     <thead>
-                      <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/40">
-                        <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-28">Key</th>
-                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Summary</th>
-                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-28">Priority</th>
-                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-32">Status</th>
-                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-36">Project</th>
-                        {is3SCTeam && <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-28">Customer</th>}
-                        {isLead && <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-28">Agent</th>}
-                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-24">Created</th>
-                        {(isClientUser || isLead) && (
-                          <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-28">SLA Due</th>
-                        )}
-                        {isLead && (
-                          <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-24">SLA</th>
-                        )}
+                      <tr className="border-b border-slate-100 dark:border-slate-800">
+                        <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-28">Key</th>
+                        <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Summary</th>
+                        <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-24">Priority</th>
+                        <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-28">Status</th>
+                        {is3SCTeam && <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-32">Customer</th>}
+                        <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-28">Agent</th>
+                        <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-20">Created</th>
+                        <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-20">SLA Due</th>
+                        <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-20">SLA</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                    <tbody className="divide-y divide-slate-50 dark:divide-slate-800/60">
                       {filteredTickets.map((ticket) => {
                         const key = ticket.ticketKey ?? generateTicketKey(ticket.project, ticket.id);
                         return (
                           <tr
                             key={ticket.id}
                             onClick={() => router.push(`/tickets/${key}`)}
-                            className={`cursor-pointer transition-colors group hover:bg-slate-50/80 dark:hover:bg-slate-800/30 ${ticket.slaBreached ? 'border-l-[3px] border-l-red-500' : ticket.slaBreachRisk ? 'border-l-[3px] border-l-amber-400' : ''}`}
+                            className={`cursor-pointer transition-colors group hover:bg-slate-50 dark:hover:bg-slate-800/40 ${ticket.slaBreached ? 'border-l-[3px] border-l-red-500' : ticket.slaBreachRisk ? 'border-l-[3px] border-l-amber-400' : ''}`}
                           >
                             <td className="px-4 py-3">
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/50 font-mono text-[11px] font-semibold text-[#0052CC] dark:text-blue-400 tracking-wide">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/50 font-mono text-[10px] font-semibold text-[#0052CC] dark:text-blue-400 tracking-wide">
                                 {key}
                               </span>
                             </td>
-                            <td className="px-3 py-3 max-w-xs">
-                              <span className="text-sm text-slate-800 dark:text-slate-200 font-medium group-hover:text-[#0052CC] dark:group-hover:text-blue-400 transition-colors line-clamp-1">
+                            <td className="px-4 py-3 max-w-xs">
+                              <span className="text-xs font-medium text-slate-800 dark:text-slate-200 group-hover:text-[#0052CC] dark:group-hover:text-blue-400 transition-colors line-clamp-1">
                                 {ticket.title}
                               </span>
-                              {ticket.description && (
-                                <p className="text-xs text-slate-400 dark:text-slate-500 line-clamp-1 mt-0.5">{ticket.description}</p>
-                              )}
                             </td>
-                            <td className="px-3 py-3">
+                            <td className="px-4 py-3">
                               <PriorityBadge priority={ticket.priority} />
                             </td>
-                            <td className="px-3 py-3">
+                            <td className="px-4 py-3">
                               <StatusLozenge status={ticket.status} />
                             </td>
-                            <td className="px-3 py-3">
-                              <span className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1">
-                                {ticket.project?.name ?? <span className="text-slate-300 dark:text-slate-600">—</span>}
-                              </span>
-                            </td>
                             {is3SCTeam && (
-                              <td className="px-3 py-3 text-xs text-slate-500 dark:text-slate-400">{ticket.client?.name ?? '—'}</td>
+                              <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400 truncate max-w-[128px]">{ticket.client?.name ?? '—'}</td>
                             )}
-                            {isLead && (
-                              <td className="px-3 py-3 text-xs text-slate-500 dark:text-slate-400">
-                                {ticket.assignedTo?.name ?? <span className="text-slate-300 dark:text-slate-600 italic">Unassigned</span>}
-                              </td>
-                            )}
-                            <td className="px-3 py-3 text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                            <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                              {ticket.assignedTo?.name ?? <span className="text-slate-300 dark:text-slate-600 italic">Unassigned</span>}
+                            </td>
+                            <td className="px-4 py-3 text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap">
                               {formatDateShort(ticket.createdAt)}
                             </td>
-                            {(isClientUser || isLead) && (
-                              <td className="px-3 py-3 text-xs whitespace-nowrap">
-                                {ticket.slaDueAt ? (
-                                  <span className={`flex items-center gap-1 ${ticket.slaBreached ? 'text-red-600 font-semibold' : ticket.slaBreachRisk ? 'text-amber-600 font-medium' : 'text-slate-400'}`}>
-                                    {ticket.slaBreached && <ShieldAlert className="w-3 h-3" />}
-                                    {ticket.slaBreachRisk && !ticket.slaBreached && <Clock className="w-3 h-3" />}
-                                    {formatDateShort(ticket.slaDueAt)}
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-300 dark:text-slate-600">—</span>
-                                )}
-                              </td>
-                            )}
-                            {isLead && (
-                              <td className="px-3 py-3 text-xs">
-                                {ticket.slaBreached ? (
-                                  <span className="inline-flex items-center gap-1 text-red-600 font-semibold"><ShieldAlert className="w-3 h-3" />Breached</span>
-                                ) : ticket.slaBreachRisk ? (
-                                  <span className="text-amber-500 font-medium">At Risk</span>
-                                ) : (
-                                  <span className="text-emerald-500">OK</span>
-                                )}
-                              </td>
-                            )}
+                            <td className="px-4 py-3 text-xs whitespace-nowrap">
+                              {ticket.slaDueAt ? (
+                                <span className={`flex items-center gap-1 ${ticket.slaBreached ? 'text-red-600 font-semibold' : ticket.slaBreachRisk ? 'text-amber-500 font-medium' : 'text-slate-400'}`}>
+                                  {ticket.slaBreached && <ShieldAlert className="w-3 h-3" />}
+                                  {ticket.slaBreachRisk && !ticket.slaBreached && <Clock className="w-3 h-3" />}
+                                  {formatDateShort(ticket.slaDueAt)}
+                                </span>
+                              ) : (
+                                <span className="text-slate-300 dark:text-slate-600">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-xs whitespace-nowrap">
+                              {ticket.slaBreached ? (
+                                <span className="inline-flex items-center gap-1 text-red-600 dark:text-red-400 font-semibold"><ShieldAlert className="w-3 h-3" />Breached</span>
+                              ) : ticket.slaBreachRisk ? (
+                                <span className="text-amber-500 dark:text-amber-400 font-medium">At Risk</span>
+                              ) : (
+                                <span className="text-emerald-500 dark:text-emerald-400">OK</span>
+                              )}
+                            </td>
                           </tr>
                         );
                       })}

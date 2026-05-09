@@ -3,138 +3,211 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
+const OVERLOAD_THRESHOLD = 8; // agent considered overloaded above this many open tickets
+
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.id || session.user.role !== "THREESC_LEAD") {
+  if (!session?.user?.id || !["THREESC_LEAD", "THREESC_ADMIN"].includes(session.user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const now = new Date();
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
-  const now = new Date();
 
-  const [totalOpen, slaBreaches, resolvedToday, escalated, agents, recentEscalations, aiRouted] =
-    await Promise.all([
-      prisma.issue.count({
-        where: { status: { in: ["OPEN", "ACKNOWLEDGED", "IN_PROGRESS"] } },
-      }),
-      prisma.issue.count({
-        where: { slaBreached: true, status: { notIn: ["RESOLVED", "CLOSED"] } },
-      }),
-      prisma.issue.count({
-        where: { status: "RESOLVED", resolvedAt: { gte: todayStart } },
-      }),
-      prisma.issue.count({
-        where: { escalated: true, status: { notIn: ["RESOLVED", "CLOSED"] } },
-      }),
-      prisma.user.findMany({
-        where: { role: "THREESC_AGENT", isActive: true },
-        select: {
-          id: true,
-          name: true,
-          assignedIssues: {
-            select: {
-              id: true,
-              status: true,
-              slaDueAt: true,
-              resolvedAt: true,
-              createdAt: true,
-              priority: true,
-            },
+  // ─── Parallel base queries ────────────────────────────────────────────
+  const [
+    needsAssignment,
+    slaRisk,
+    escalatedCount,
+    agents,
+    recentEscalations,
+    aiRouted,
+    clientsWithCritical,
+  ] = await Promise.all([
+    // Unassigned open tickets
+    prisma.issue.count({
+      where: { assignedToId: null, status: { in: ["OPEN", "ACKNOWLEDGED", "IN_PROGRESS"] } },
+    }),
+    // SLA at risk (breach imminent or already breached)
+    prisma.issue.count({
+      where: {
+        status: { notIn: ["RESOLVED", "CLOSED"] },
+        OR: [{ slaBreachRisk: true }, { slaBreached: true }],
+      },
+    }),
+    // Active escalations
+    prisma.issue.count({
+      where: { escalated: true, status: { notIn: ["RESOLVED", "CLOSED"] } },
+    }),
+    // All agents with their tickets
+    prisma.user.findMany({
+      where: { role: "THREESC_AGENT", isActive: true },
+      select: {
+        id: true,
+        name: true,
+        assignedIssues: {
+          where: { status: { in: ["OPEN", "ACKNOWLEDGED", "IN_PROGRESS"] } },
+          select: {
+            id: true,
+            status: true,
+            priority: true,
+            slaDueAt: true,
+            createdAt: true,
+            resolvedAt: true,
           },
         },
-        orderBy: { name: "asc" },
-      }),
-      prisma.issue.findMany({
-        where: { escalated: true },
-        orderBy: { escalatedAt: "desc" },
-        take: 5,
-        select: {
-          id: true,
-          ticketKey: true,
-          title: true,
-          priority: true,
-          escalatedAt: true,
-          assignedTo: { select: { name: true } },
-          client: { select: { name: true } },
-        },
-      }),
-      prisma.issue.count({
-        where: { aiCategory: { not: null }, createdAt: { gte: todayStart } },
-      }),
-    ]);
+      },
+      orderBy: { name: "asc" },
+    }),
+    // Recent escalations
+    prisma.issue.findMany({
+      where: { escalated: true, status: { notIn: ["RESOLVED", "CLOSED"] } },
+      orderBy: { escalatedAt: "desc" },
+      take: 5,
+      select: {
+        id: true, ticketKey: true, title: true, priority: true, escalatedAt: true,
+        assignedTo: { select: { name: true } },
+        client: { select: { name: true } },
+      },
+    }),
+    // AI routed today
+    prisma.issue.count({
+      where: { aiCategory: { not: null }, createdAt: { gte: todayStart } },
+    }),
+    // Clients with 2+ open CRITICAL tickets (customer risk)
+    prisma.issue.groupBy({
+      by: ["clientId"],
+      where: { priority: "CRITICAL", status: { notIn: ["RESOLVED", "CLOSED"] } },
+      _count: { id: true },
+      having: { id: { _count: { gte: 2 } } },
+    }),
+  ]);
 
-  const agentStats = agents.map((agent) => {
-    const active = agent.assignedIssues.filter((i) =>
-      ["OPEN", "ACKNOWLEDGED", "IN_PROGRESS"].includes(i.status)
-    );
-    const overdue = active.filter((i) => i.slaDueAt && new Date(i.slaDueAt) < now).length;
-    const resolvedByAgent = agent.assignedIssues.filter(
-      (i) => i.resolvedAt && i.status === "RESOLVED"
-    );
-    const resolvedTodayCount = resolvedByAgent.filter(
-      (i) => new Date(i.resolvedAt!) >= todayStart
+  // ─── Agent load balancer ──────────────────────────────────────────────
+  const agentLoad = agents.map((agent) => {
+    const open = agent.assignedIssues.length;
+    const critical = agent.assignedIssues.filter((i) => i.priority === "CRITICAL").length;
+    const overdue = agent.assignedIssues.filter(
+      (i) => i.slaDueAt && new Date(i.slaDueAt) < now
     ).length;
-    // Average resolution time in hours for this agent's resolved issues
-    let avgResponseHrs = 0;
-    if (resolvedByAgent.length > 0) {
-      const totalMs = resolvedByAgent.reduce((sum, i) => {
-        return sum + (new Date(i.resolvedAt!).getTime() - new Date(i.createdAt).getTime());
-      }, 0);
-      avgResponseHrs = Math.round(totalMs / resolvedByAgent.length / 3600000);
+    return { id: agent.id, name: agent.name, open, critical, overdue };
+  });
+
+  const maxOpen = Math.max(...agentLoad.map((a) => a.open), 1);
+  const agentLoadWithPct = agentLoad.map((a) => ({
+    ...a,
+    loadPct: Math.round((a.open / maxOpen) * 100),
+    overloaded: a.open >= OVERLOAD_THRESHOLD,
+  }));
+
+  const overloadedAgents = agentLoadWithPct.filter((a) => a.overloaded).length;
+
+  // ─── Priority queue ───────────────────────────────────────────────────
+  const [unassigned, slaRiskTickets, escalatedTickets, overdueTickets] = await Promise.all([
+    prisma.issue.findMany({
+      where: {
+        assignedToId: null,
+        priority: { in: ["CRITICAL", "HIGH"] },
+        status: { in: ["OPEN", "ACKNOWLEDGED"] },
+      },
+      orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+      take: 6,
+      select: {
+        id: true, ticketKey: true, title: true, priority: true, status: true,
+        createdAt: true, slaDueAt: true,
+        client: { select: { name: true } },
+        assignedTo: { select: { name: true } },
+      },
+    }),
+    prisma.issue.findMany({
+      where: {
+        status: { notIn: ["RESOLVED", "CLOSED"] },
+        OR: [{ slaBreachRisk: true }, { slaBreached: true }],
+      },
+      orderBy: { slaDueAt: "asc" },
+      take: 6,
+      select: {
+        id: true, ticketKey: true, title: true, priority: true, status: true,
+        createdAt: true, slaDueAt: true, slaBreached: true,
+        client: { select: { name: true } },
+        assignedTo: { select: { name: true } },
+      },
+    }),
+    prisma.issue.findMany({
+      where: { escalated: true, status: { notIn: ["RESOLVED", "CLOSED"] } },
+      orderBy: { escalatedAt: "desc" },
+      take: 6,
+      select: {
+        id: true, ticketKey: true, title: true, priority: true, status: true,
+        createdAt: true, slaDueAt: true, escalatedAt: true,
+        client: { select: { name: true } },
+        assignedTo: { select: { name: true } },
+      },
+    }),
+    prisma.issue.findMany({
+      where: {
+        slaDueAt: { lt: now },
+        slaBreached: true,
+        status: { notIn: ["RESOLVED", "CLOSED"] },
+      },
+      orderBy: { slaDueAt: "asc" },
+      take: 6,
+      select: {
+        id: true, ticketKey: true, title: true, priority: true, status: true,
+        createdAt: true, slaDueAt: true,
+        client: { select: { name: true } },
+        assignedTo: { select: { name: true } },
+      },
+    }),
+  ]);
+
+  // Merge and deduplicate, assign primary reason
+  const seen = new Set<string>();
+  const queue: {
+    id: string; ticketKey: string | null; title: string; priority: string;
+    status: string; reason: string; client: { name: string };
+    assignedTo: { name: string } | null; slaDueAt: string | null; createdAt: string;
+  }[] = [];
+
+  const addToQueue = (tickets: typeof unassigned, reason: string) => {
+    for (const t of tickets) {
+      if (seen.has(t.id)) continue;
+      seen.add(t.id);
+      queue.push({
+        ...t,
+        reason,
+        createdAt: t.createdAt.toISOString(),
+        slaDueAt: t.slaDueAt?.toISOString() ?? null,
+      });
     }
-    return {
-      id: agent.id,
-      name: agent.name,
-      assigned: active.length,
-      overdue,
-      resolvedToday: resolvedTodayCount,
-      avgResponseHrs,
-    };
-  });
+  };
 
-  // Issues by customer + priority for chart
-  const byCustomerPriority = await prisma.issue.groupBy({
-    by: ["clientId", "priority"],
-    where: { status: { in: ["OPEN", "ACKNOWLEDGED", "IN_PROGRESS"] } },
-    _count: { id: true },
-  });
-  const clientIds = [...new Set(byCustomerPriority.map((r) => r.clientId))];
-  const clients = await prisma.client.findMany({
-    where: { id: { in: clientIds } },
-    select: { id: true, name: true },
-  });
-  const clientMap = Object.fromEntries(clients.map((c) => [c.id, c.name]));
-  const chartData = byCustomerPriority.reduce<
-    Record<string, Record<string, number>>
-  >((acc, row) => {
-    const name = clientMap[row.clientId] ?? row.clientId;
-    if (!acc[name]) acc[name] = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
-    acc[name][row.priority] = row._count.id;
-    return acc;
-  }, {});
+  addToQueue(escalatedTickets as any, "escalated");
+  addToQueue(slaRiskTickets as any, "sla_risk");
+  addToQueue(unassigned as any, "unassigned");
+  addToQueue(overdueTickets as any, "overdue");
 
-  // Calculate actual average resolution time in hours across all resolved issues
-  const resolvedWithTimes = await prisma.issue.findMany({
-    where: { status: "RESOLVED", resolvedAt: { not: null } },
-    select: { createdAt: true, resolvedAt: true },
-    orderBy: { resolvedAt: "desc" },
-    take: 100,
+  // Sort by priority weight then createdAt
+  const priorityWeight = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+  queue.sort((a, b) => {
+    const pw = (priorityWeight[a.priority as keyof typeof priorityWeight] ?? 3) -
+               (priorityWeight[b.priority as keyof typeof priorityWeight] ?? 3);
+    if (pw !== 0) return pw;
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   });
-  let avgResolutionHrs = 0;
-  if (resolvedWithTimes.length > 0) {
-    const totalMs = resolvedWithTimes.reduce(
-      (sum, i) => sum + (i.resolvedAt!.getTime() - i.createdAt.getTime()),
-      0
-    );
-    avgResolutionHrs = Math.round(totalMs / resolvedWithTimes.length / 3600000);
-  }
 
   return NextResponse.json({
-    kpis: { totalOpen, slaBreaches, resolvedToday, escalated, csatScore: 88, avgResolutionHrs },
-    agentStats,
+    kpis: {
+      needsAssignment,
+      slaRisk,
+      escalated: escalatedCount,
+      overloadedAgents,
+      customerRisk: clientsWithCritical.length,
+    },
+    priorityQueue: queue.slice(0, 10),
+    agentLoad: agentLoadWithPct,
     recentEscalations,
-    chartData: Object.entries(chartData).map(([name, v]) => ({ name, ...v })),
     aiStats: {
       routedToday: aiRouted,
       needsReview: Math.max(0, Math.floor(aiRouted * 0.2)),
