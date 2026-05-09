@@ -38,10 +38,15 @@ export async function GET(request: Request) {
     resolvedIssuesByDay,
     topCategoriesRaw,
     slaByCategoryRaw,
-    clientsWithCounts,
+    clientsRaw,
     agentWorkloadRaw,
     clients,
     unrespondedOver24hRaw,
+    frtCurrentRaw,
+    frtPrevRaw,
+    openIssuesPrev,
+    criticalPrev,
+    unassignedPrev,
   ] = await Promise.all([
     prisma.issue.count({ where: { ...clientWhere } }),
     prisma.issue.count({ where: { ...clientWhere, status: { in: [...openStatuses] } } }),
@@ -106,27 +111,54 @@ export async function GET(request: Request) {
       ORDER BY count DESC
       LIMIT 1
     `,
-    // Per-client health
-    prisma.client.findMany({
-      where: clientId ? { id: clientId } : {},
-      select: {
-        id: true, name: true, isActive: true, updatedAt: true,
-        issues: { select: { status: true, slaBreached: true } },
-        members: { select: { userId: true } },
-      },
-      orderBy: { name: 'asc' },
-    }),
-    // Agent workload
-    prisma.user.findMany({
-      where: { role: { in: ['THREESC_AGENT', 'THREESC_LEAD'] } },
-      select: {
-        id: true, name: true, role: true,
-        assignedIssues: {
-          where: { ...clientWhere, status: { in: [...openStatuses] } },
-          select: { id: true, priority: true },
-        },
-      },
-    }),
+    // Per-client health — optimized: use SQL aggregation instead of loading all issues into memory
+    prisma.$queryRaw<
+      Array<{ id: string; name: string; isActive: boolean; updatedAt: Date; userCount: number; openCount: number; slaBreachCount: number; totalCount: number }>
+    >`
+      SELECT
+        c.id, c.name, c."isActive", c."updatedAt",
+        COALESCE(m.user_count, 0)::int as "userCount",
+        COALESCE(i.open_count, 0)::int as "openCount",
+        COALESCE(i.sla_breach_count, 0)::int as "slaBreachCount",
+        COALESCE(i.total_count, 0)::int as "totalCount"
+      FROM "Client" c
+      LEFT JOIN (
+        SELECT "clientId", COUNT(*) as user_count FROM "ClientMember" GROUP BY "clientId"
+      ) m ON c.id = m."clientId"
+      LEFT JOIN (
+        SELECT
+          "clientId",
+          COUNT(CASE WHEN status IN ('OPEN', 'IN_PROGRESS', 'ACKNOWLEDGED') THEN 1 END) as open_count,
+          COUNT(CASE WHEN "slaBreached" = true THEN 1 END) as sla_breach_count,
+          COUNT(*) as total_count
+        FROM "Issue"
+        GROUP BY "clientId"
+      ) i ON c.id = i."clientId"
+      ${clientId ? Prisma.sql`WHERE c.id = ${clientId}` : Prisma.empty}
+      ORDER BY c.name ASC
+    `,
+    // Agent workload — optimized: use SQL aggregation for counts
+    prisma.$queryRaw<
+      Array<{ id: string; name: string | null; role: string; open: number; critical: number }>
+    >`
+      SELECT
+        u.id, u.name, u.role,
+        COALESCE(i.open_count, 0)::int as open,
+        COALESCE(i.critical_count, 0)::int as critical
+      FROM "User" u
+      LEFT JOIN (
+        SELECT
+          "assignedToId",
+          COUNT(*) as open_count,
+          COUNT(CASE WHEN priority = 'CRITICAL' THEN 1 END) as critical_count
+        FROM "Issue"
+        WHERE status IN ('OPEN', 'IN_PROGRESS', 'ACKNOWLEDGED')
+        ${clientWhere.clientId ? Prisma.sql`AND "clientId" = ${clientWhere.clientId}` : Prisma.empty}
+        GROUP BY "assignedToId"
+      ) i ON u.id = i."assignedToId"
+      WHERE u.role IN ('THREESC_AGENT', 'THREESC_LEAD')
+      ORDER BY open DESC
+    `,
     // Clients for dropdown (always unfiltered)
     prisma.client.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }),
     // Unresponded over 24h
@@ -139,49 +171,48 @@ export async function GET(request: Request) {
         SELECT 1 FROM "Comment" c WHERE c."issueId" = i.id AND c."isInternal" = false
       )
     `,
+    // FRT current period
+    prisma.$queryRaw<{ avg_hours: number | null }[]>`
+      SELECT AVG(EXTRACT(EPOCH FROM (c."createdAt" - i."createdAt")) / 3600) as avg_hours
+      FROM "Issue" i
+      JOIN (
+        SELECT "issueId", MIN("createdAt") as "createdAt"
+        FROM "Comment" WHERE "isInternal" = false
+        GROUP BY "issueId"
+      ) c ON c."issueId" = i.id
+      WHERE i.status IN ('RESOLVED', 'CLOSED')
+      AND i."createdAt" >= ${rangeStart} ${clientSql}
+    `,
+    // FRT previous period
+    prisma.$queryRaw<{ avg_hours: number | null }[]>`
+      SELECT AVG(EXTRACT(EPOCH FROM (c."createdAt" - i."createdAt")) / 3600) as avg_hours
+      FROM "Issue" i
+      JOIN (
+        SELECT "issueId", MIN("createdAt") as "createdAt"
+        FROM "Comment" WHERE "isInternal" = false
+        GROUP BY "issueId"
+      ) c ON c."issueId" = i.id
+      WHERE i.status IN ('RESOLVED', 'CLOSED')
+      AND i."createdAt" >= ${prevRangeStart} AND i."createdAt" < ${rangeStart} ${clientSql}
+    `,
+    // Previous period open issues count
+    prisma.issue.count({ where: { ...clientWhere, createdAt: { gte: prevRangeStart, lt: rangeStart } } }),
+    // Previous period critical count
+    prisma.issue.count({ where: { ...clientWhere, priority: 'CRITICAL', createdAt: { gte: prevRangeStart, lt: rangeStart } } }),
+    // Previous period unassigned count
+    prisma.issue.count({ where: { ...clientWhere, assignedToId: null, createdAt: { gte: prevRangeStart, lt: rangeStart } } }),
   ]);
 
-  // Average FRT (current + previous period)
+  // Extract FRT values (already fetched in Promise.all above)
   let avgFrtHours: number | null = null;
   let avgFrtHoursPrev: number | null = null;
   try {
-    const [frtCurr, frtPrev] = await Promise.all([
-      prisma.$queryRaw<{ avg_hours: number | null }[]>`
-        SELECT AVG(EXTRACT(EPOCH FROM (c."createdAt" - i."createdAt")) / 3600) as avg_hours
-        FROM "Issue" i
-        JOIN (
-          SELECT "issueId", MIN("createdAt") as "createdAt"
-          FROM "Comment" WHERE "isInternal" = false
-          GROUP BY "issueId"
-        ) c ON c."issueId" = i.id
-        WHERE i.status IN ('RESOLVED', 'CLOSED')
-        AND i."createdAt" >= ${rangeStart} ${clientSql}
-      `,
-      prisma.$queryRaw<{ avg_hours: number | null }[]>`
-        SELECT AVG(EXTRACT(EPOCH FROM (c."createdAt" - i."createdAt")) / 3600) as avg_hours
-        FROM "Issue" i
-        JOIN (
-          SELECT "issueId", MIN("createdAt") as "createdAt"
-          FROM "Comment" WHERE "isInternal" = false
-          GROUP BY "issueId"
-        ) c ON c."issueId" = i.id
-        WHERE i.status IN ('RESOLVED', 'CLOSED')
-        AND i."createdAt" >= ${prevRangeStart} AND i."createdAt" < ${rangeStart} ${clientSql}
-      `,
-    ]);
-    avgFrtHours = frtCurr[0]?.avg_hours != null ? Math.round(Number(frtCurr[0].avg_hours) * 10) / 10 : null;
-    avgFrtHoursPrev = frtPrev[0]?.avg_hours != null ? Math.round(Number(frtPrev[0].avg_hours) * 10) / 10 : null;
+    avgFrtHours = frtCurrentRaw[0]?.avg_hours != null ? Math.round(Number(frtCurrentRaw[0].avg_hours) * 10) / 10 : null;
+    avgFrtHoursPrev = frtPrevRaw[0]?.avg_hours != null ? Math.round(Number(frtPrevRaw[0].avg_hours) * 10) / 10 : null;
   } catch {
     avgFrtHours = null;
     avgFrtHoursPrev = null;
   }
-
-  // Previous period counts for KPI deltas
-  const [openIssuesPrev, criticalPrev, unassignedPrev] = await Promise.all([
-    prisma.issue.count({ where: { ...clientWhere, createdAt: { gte: prevRangeStart, lt: rangeStart } } }),
-    prisma.issue.count({ where: { ...clientWhere, priority: 'CRITICAL', createdAt: { gte: prevRangeStart, lt: rangeStart } } }),
-    prisma.issue.count({ where: { ...clientWhere, assignedToId: null, createdAt: { gte: prevRangeStart, lt: rangeStart } } }),
-  ]);
 
   const delta = (curr: number, prev: number): { pct: string; dir: 'up' | 'down' | 'neutral' } => {
     if (prev === 0) return { pct: '—', dir: 'neutral' };
@@ -199,20 +230,20 @@ export async function GET(request: Request) {
     volumeByDay.push({ day: key.slice(5), created: createdMap.get(key) ?? 0, resolved: resolvedMap.get(key) ?? 0 });
   }
 
-  const customerHealth = clientsWithCounts.map((c) => ({
+  const customerHealth = clientsRaw.map((c) => ({
     id: c.id, name: c.name, isActive: c.isActive, lastActive: c.updatedAt,
-    userCount: c.members.length,
-    openIssues: c.issues.filter((i) => openStatuses.includes(i.status as any)).length,
-    slaBreaches: c.issues.filter((i) => i.slaBreached).length,
-    totalIssues: c.issues.length,
+    userCount: c.userCount,
+    openIssues: c.openCount,
+    slaBreaches: c.slaBreachCount,
+    totalIssues: c.totalCount,
     csat: Math.floor(75 + Math.random() * 20),
   }));
 
   const agentWorkload = agentWorkloadRaw
     .map((a) => ({
       id: a.id, name: a.name ?? 'Unknown', role: a.role,
-      open: a.assignedIssues.length,
-      critical: a.assignedIssues.filter((i) => i.priority === 'CRITICAL').length,
+      open: a.open,
+      critical: a.critical,
     }))
     .sort((a, b) => b.open - a.open);
 
@@ -294,7 +325,7 @@ export async function GET(request: Request) {
 
   // 5. Agent capacity signal — actionable reassignment recommendation
   const agentsWithCapacity = agentWorkloadRaw
-    .filter((a) => a.assignedIssues.length <= 2)
+    .filter((a) => a.open <= 2)
     .map((a) => (a.name ?? 'Agent').split(' ')[0]);
   if (agentsWithCapacity.length > 0 && unassignedIssues >= 3) {
     const names = agentsWithCapacity.slice(0, 2).join(' and ');
@@ -358,7 +389,7 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     kpis: {
-      totalCustomers: clientsWithCounts.length,
+      totalCustomers: clientsRaw.length,
       totalIssues, openIssues, slaHealth,
       resolvedIssues: totalIssues - openIssues,
       slaRiskCount: slaAtRiskIssues,
