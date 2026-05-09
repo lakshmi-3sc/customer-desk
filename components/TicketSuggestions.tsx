@@ -18,9 +18,17 @@ interface Suggestion {
   priority?: string;
 }
 
+interface AIRecommendation {
+  category: string;
+  priority: string;
+  confidence: number;
+  reasoning: string;
+}
+
 interface SuggestionsData {
   tickets: Suggestion[];
   articles: Suggestion[];
+  aiSuggestion?: AIRecommendation | null;
 }
 
 export function TicketSuggestions({
@@ -28,11 +36,13 @@ export function TicketSuggestions({
   onTicketSelect,
   onItemClick,
   onSuggestionsChange,
+  onAISuggestion,
 }: {
   query: string;
   onTicketSelect?: (ticketId: string) => void;
   onItemClick?: (item: Suggestion, type: "article" | "ticket") => void;
   onSuggestionsChange?: (suggestions: Suggestion[]) => void;
+  onAISuggestion?: (suggestion: AIRecommendation | null) => void;
 }) {
   const router = useRouter();
   const [suggestions, setSuggestions] = useState<SuggestionsData>({
@@ -45,8 +55,9 @@ export function TicketSuggestions({
 
   useEffect(() => {
     if (!query || query.length < 5) {
-      setSuggestions({ tickets: [], articles: [] });
+      setSuggestions({ tickets: [], articles: [], aiSuggestion: null });
       onSuggestionsChange?.([]);
+      onAISuggestion?.(null);
       return;
     }
 
@@ -62,13 +73,19 @@ export function TicketSuggestions({
         );
         const data = await response.json();
         setSuggestions(data);
+
+        // Call suggestions change callback
         if (onSuggestionsChange) {
           const allItems = [...(data.tickets || []), ...(data.articles || [])];
           onSuggestionsChange(allItems);
         }
+
+        // Call AI suggestion callback
+        onAISuggestion?.(data.aiSuggestion ?? null);
       } catch (err) {
         setError("Failed to load suggestions");
         console.error(err);
+        onAISuggestion?.(null);
       } finally {
         setLoading(false);
       }
@@ -77,53 +94,57 @@ export function TicketSuggestions({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query, onSuggestionsChange]);
+  }, [query, onSuggestionsChange, onAISuggestion]);
 
   const allSuggestions = [
     ...suggestions.tickets.map((t) => ({ ...t, type: "ticket" as const })),
     ...suggestions.articles.map((a) => ({ ...a, type: "article" as const })),
   ];
 
-  // Show dropdown while user is typing (query >= 2 chars), keep it visible during loading
+  // Show suggestions while user is typing. Empty states stay silent so the form does not jump.
   if (!query || query.length < 2) {
+    return null;
+  }
+
+  if (!loading && !error && allSuggestions.length === 0) {
     return null;
   }
 
   return (
     <div
-      className="relative w-full mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-40 overflow-hidden"
+      className="relative z-40 mt-2 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900"
     >
       {/* Header with gradient accent */}
-      <div className="px-4 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2 bg-gradient-to-r from-amber-50 dark:from-amber-950/30 to-transparent">
+      <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50/80 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/50">
         <div className="flex items-center gap-2.5 flex-1">
-          <div className="p-1.5 bg-amber-100 dark:bg-amber-900/40 rounded-md">
-            <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+          <div className="rounded-md bg-amber-100 p-1 dark:bg-amber-900/40">
+            <Lightbulb className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
           </div>
-          <div>
-            <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+          <div className="min-w-0">
+            <span className="text-xs font-semibold text-slate-900 dark:text-slate-100">
               Smart Suggestions
             </span>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">AI-powered recommendations</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">Related tickets and articles</p>
           </div>
         </div>
       </div>
 
       {loading ? (
-        <div className="px-4 py-8 text-center">
-          <div className="inline-flex flex-col items-center gap-3">
+        <div className="px-3 py-2.5">
+          <div className="inline-flex items-center gap-2">
             <div className="flex gap-1">
-              <div className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-pulse" />
-              <div className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
-              <div className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
+              <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" />
+              <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" style={{ animationDelay: "0.2s" }} />
+              <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" style={{ animationDelay: "0.4s" }} />
             </div>
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
-              Searching knowledge base and resolved tickets...
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              Searching related tickets...
             </p>
           </div>
         </div>
       ) : error ? (
-        <div className="px-4 py-4 bg-red-50 dark:bg-red-950/20 border-t border-slate-200 dark:border-slate-700">
-          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        <div className="border-t border-slate-200 bg-red-50 px-3 py-2 dark:border-slate-700 dark:bg-red-950/20">
+          <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
         </div>
       ) : allSuggestions.length === 0 ? (
         <div className="px-4 py-8 text-center">
@@ -138,7 +159,7 @@ export function TicketSuggestions({
           </div>
         </div>
       ) : (
-        <div className="max-h-96 overflow-y-auto">
+        <div className="max-h-72 overflow-y-auto">
           {/* Resolved Tickets Section */}
           {suggestions.tickets.length > 0 && (
             <div>

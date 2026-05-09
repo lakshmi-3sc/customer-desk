@@ -113,14 +113,15 @@ function SummaryChip({
 }: { label: string; value: string | number; sub?: string; good?: boolean }) {
   const Icon = good === undefined ? Minus : good ? ArrowUpRight : ArrowDownRight;
   const color = good === undefined ? "text-slate-400" : good ? "text-emerald-600" : "text-red-500";
+  const borderColor = good === undefined ? "border-l-slate-200 dark:border-l-slate-700" : good ? "border-l-emerald-500" : "border-l-red-500";
   return (
-    <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 flex flex-col gap-1">
-      <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</p>
-      <div className="flex items-end gap-1.5">
-        <span className="text-2xl font-semibold text-slate-900 dark:text-slate-100 tabular-nums">{value}</span>
-        <Icon className={`w-4 h-4 mb-0.5 ${color}`} />
+    <div className={`bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 border-l-4 ${borderColor} p-3 flex flex-col gap-0.5`}>
+      <div className="flex items-start justify-between">
+        <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</p>
+        <Icon className={`w-4 h-4 ${color} opacity-60`} />
       </div>
-      {sub && <p className="text-[11px] text-slate-400">{sub}</p>}
+      <p className="text-3xl font-bold text-slate-900 dark:text-slate-100 tabular-nums">{value}</p>
+      {sub && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{sub}</p>}
     </div>
   );
 }
@@ -293,7 +294,7 @@ export default function AnalyticsPage() {
           <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
             {loading ? (
               Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 animate-pulse h-20" />
+                <div key={i} className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 border-l-4 border-l-slate-200 dark:border-l-slate-700 p-3 animate-pulse h-20" />
               ))
             ) : (
               <>
@@ -519,7 +520,7 @@ export default function AnalyticsPage() {
               ) : (
                 <>
                   <div className="space-y-2 mb-4">
-                    {(data?.slaByCustomer ?? [])
+                    {[...(data?.slaByCustomer ?? [])]
                       .sort((a, b) => a.compliance - b.compliance)
                       .slice(0, 5)
                       .map((c) => (

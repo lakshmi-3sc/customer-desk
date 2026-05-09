@@ -4,6 +4,7 @@ import { authOptions } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { resolveTicketId } from "@/lib/resolve-ticket";
 import { createNotification, getStatusChangeRecipients } from "@/lib/notifications";
+import { generateEmbedding } from "@/lib/embeddings";
 import type { EmailContext } from "@/lib/notifications";
 import type { Server } from "socket.io";
 import type { IssuePriority } from "@prisma/client";
@@ -162,6 +163,14 @@ export async function PUT(
       },
     });
 
+    // Generate embedding if ticket was just resolved (async, non-blocking)
+    if (status === "RESOLVED" && !ticket.embedding) {
+      // Run embedding generation in background without awaiting
+      generateAndStoreEmbeddingAsync(id, updatedTicket.title, updatedTicket.description).catch(
+        (error) => console.error(`Failed to generate embedding for ticket ${id}:`, error)
+      );
+    }
+
     // Build shared email context
     const baseCtx: EmailContext = {
       ticketKey: updatedTicket.ticketKey ?? "",
@@ -237,5 +246,39 @@ export async function PUT(
       { error: "Failed to update ticket" },
       { status: 500 },
     );
+  }
+}
+
+/**
+ * Generate and store embedding for a resolved ticket
+ * This is an async function called in the background (non-blocking)
+ * Uses Anthropic's embedding model to generate 1024-dimensional vectors for pgvector
+ */
+async function generateAndStoreEmbeddingAsync(
+  ticketId: string,
+  title: string,
+  description: string
+): Promise<void> {
+  try {
+    // Combine title and description for embedding
+    const text = `${title}. ${description}`;
+
+    // Generate embedding using Anthropic API
+    const embedding = await generateEmbedding(text);
+
+    // Store in database as JSON string (pgvector accepts JSON)
+    await prisma.issue.update({
+      where: { id: ticketId },
+      data: {
+        embedding: JSON.stringify(embedding),
+        embeddingModel: "claude-3-5-sonnet-20241022",
+        embeddingAt: new Date(),
+      },
+    });
+
+    console.log(`✓ Generated embedding for ticket ${ticketId}`);
+  } catch (error) {
+    console.error(`✗ Failed to generate embedding for ticket ${ticketId}:`, error);
+    // Don't throw - this is a background operation
   }
 }

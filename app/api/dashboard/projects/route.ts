@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ projects });
     }
 
-    // For 3SC team, return all projects from all clients
+    // For 3SC team, return all projects from all clients with client info
     const projects = await prisma.project.findMany({
       where: { status: "ACTIVE" },
       select: {
@@ -59,11 +59,18 @@ export async function GET(req: NextRequest) {
         description: true,
         status: true,
         clientId: true,
+        client: { select: { name: true } },
       },
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json({ projects });
+    // Transform to include client name in display: "Client - Project"
+    const projectsWithClient = projects.map(p => ({
+      ...p,
+      displayName: `${p.client.name} - ${p.name}`
+    }));
+
+    return NextResponse.json({ projects: projectsWithClient });
   } catch (error) {
     console.error("Error fetching projects:", error);
     return NextResponse.json(

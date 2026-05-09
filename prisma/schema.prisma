@@ -126,7 +126,7 @@ model Issue {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   ticketKey        String?           @unique
-  searchVector     String?           @db.Text
+  embedding        Unsupported("vector(1024)")? // pgvector - 1024D embeddings (Anthropic model)
   comments         Comment[]
   assignedTo       User?             @relation("AssignedTo", fields: [assignedToId], references: [id])
   client           Client            @relation(fields: [clientId], references: [id])
@@ -213,7 +213,6 @@ model IssueHistory {
 
 model KnowledgeBase {
   id          String   @id @default(cuid())
-  slug        String?
   title       String
   content     String
   category    String?
@@ -223,7 +222,7 @@ model KnowledgeBase {
   isInternal  Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  searchVector String?  @db.Text
+  embedding   Unsupported("vector(1024)")? // pgvector - 1024D embeddings (Anthropic model)
   client      Client?  @relation(fields: [clientId], references: [id])
   createdBy   User     @relation(fields: [createdById], references: [id])
   feedback    KnowledgeBaseFeedback[]

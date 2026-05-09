@@ -343,13 +343,16 @@ function TicketsContent() {
                 </select>
               )}
 
-              <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)} className={selectCls} style={{ maxWidth: '160px' }}>
+              <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)} className={selectCls} style={{ maxWidth: '200px' }}>
                 <option value="">Project</option>
                 {projects
                   .filter((p) => !filterClient || p.clientId === filterClient)
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>{p.name.length > 22 ? p.name.slice(0, 19) + '…' : p.name}</option>
-                  ))}
+                  .map((p) => {
+                    const displayText = p.displayName || p.name;
+                    return (
+                      <option key={p.id} value={p.id}>{displayText.length > 25 ? displayText.slice(0, 22) + '…' : displayText}</option>
+                    );
+                  })}
               </select>
 
               {isLead && (

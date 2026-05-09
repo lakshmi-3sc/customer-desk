@@ -66,6 +66,12 @@ export default function CreateTicketPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<SuggestionItem | null>(null);
   const [allSuggestions, setAllSuggestions] = useState<SuggestionItem[]>([]);
+  const [aiSuggestion, setAiSuggestion] = useState<{
+    category: string;
+    priority: string;
+    confidence: number;
+    reasoning: string;
+  } | null>(null);
 
   // Clear error whenever suggestions appear
   useEffect(() => {
@@ -191,6 +197,9 @@ export default function CreateTicketPage() {
     { value: "PERFORMANCE", label: "Performance" },
     { value: "ACCESS_SECURITY", label: "Access & Security" },
   ];
+
+  const priorityLabel = PRIORITIES.find((p) => p.value === aiSuggestion?.priority)?.label ?? aiSuggestion?.priority;
+  const categoryLabel = CATEGORIES.find((c) => c.value === aiSuggestion?.category)?.label ?? aiSuggestion?.category?.replace(/_/g, " ");
 
   return (
     <div className="h-screen w-screen flex overflow-hidden bg-[#F8F9FB] dark:bg-slate-950">
@@ -325,16 +334,32 @@ export default function CreateTicketPage() {
                         setDrawerOpen(true);
                       }}
                       onSuggestionsChange={setAllSuggestions}
+                      onAISuggestion={setAiSuggestion}
                     />
                   </div>
                 </div>
 
-                {/* Priority + Category row */}
+                {/* Priority + Category row with AI suggestions */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <Label htmlFor="priority" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Priority
-                    </Label>
+                    <div className="flex min-h-6 items-center justify-between gap-2">
+                      <Label htmlFor="priority" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        Priority
+                      </Label>
+                      {aiSuggestion?.priority && aiSuggestion.priority !== priority && (
+                        <button
+                          type="button"
+                          onClick={() => setPriority(aiSuggestion.priority)}
+                          className="group inline-flex max-w-[170px] items-center gap-1.5 rounded-full border border-blue-200 bg-gradient-to-r from-blue-50 via-white to-amber-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 shadow-[0_6px_18px_rgba(0,82,204,0.12)] ring-1 ring-blue-100/70 transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-[0_8px_22px_rgba(0,82,204,0.18)] dark:border-blue-800 dark:from-blue-950/40 dark:via-slate-900 dark:to-amber-950/20 dark:text-blue-300 dark:ring-blue-900/40"
+                          title={`Confidence: ${Math.round(aiSuggestion.confidence * 100)}% - ${aiSuggestion.reasoning}`}
+                        >
+                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[9px] font-bold text-white shadow-sm transition group-hover:bg-amber-500">
+                            AI
+                          </span>
+                          <span className="truncate">{priorityLabel}</span>
+                        </button>
+                      )}
+                    </div>
                     <select
                       id="priority"
                       value={priority}
@@ -348,9 +373,24 @@ export default function CreateTicketPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="category" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Category
-                    </Label>
+                    <div className="flex min-h-6 items-center justify-between gap-2">
+                      <Label htmlFor="category" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        Category
+                      </Label>
+                      {aiSuggestion?.category && aiSuggestion.category !== category && (
+                        <button
+                          type="button"
+                          onClick={() => setCategory(aiSuggestion.category)}
+                          className="group inline-flex max-w-[190px] items-center gap-1.5 rounded-full border border-blue-200 bg-gradient-to-r from-blue-50 via-white to-amber-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 shadow-[0_6px_18px_rgba(0,82,204,0.12)] ring-1 ring-blue-100/70 transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-[0_8px_22px_rgba(0,82,204,0.18)] dark:border-blue-800 dark:from-blue-950/40 dark:via-slate-900 dark:to-amber-950/20 dark:text-blue-300 dark:ring-blue-900/40"
+                          title={`Confidence: ${Math.round(aiSuggestion.confidence * 100)}% - ${aiSuggestion.reasoning}`}
+                        >
+                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[9px] font-bold text-white shadow-sm transition group-hover:bg-amber-500">
+                            AI
+                          </span>
+                          <span className="truncate">{categoryLabel}</span>
+                        </button>
+                      )}
+                    </div>
                     <select
                       id="category"
                       value={category}

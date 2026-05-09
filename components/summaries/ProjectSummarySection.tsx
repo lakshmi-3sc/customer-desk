@@ -1,5 +1,6 @@
 "use client";
 
+
 import { useState, useEffect } from "react";
 import { TrendingUp, AlertCircle, Calendar } from "lucide-react";
 import type { Summary } from "@prisma/client";

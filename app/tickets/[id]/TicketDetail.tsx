@@ -1442,8 +1442,8 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                   </div>
                 )}
 
-                {/* Resolution Time Prediction — 3SC team only */}
-                {is3SCTeam && (
+                {/* Resolution Time Prediction — 3SC team only, not for resolved/closed tickets */}
+                {is3SCTeam && ticket?.status !== 'RESOLVED' && ticket?.status !== 'CLOSED' && (
                   <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 overflow-hidden">
                     <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
                       <div className="w-6 h-6 rounded-md bg-emerald-600 flex items-center justify-center">
