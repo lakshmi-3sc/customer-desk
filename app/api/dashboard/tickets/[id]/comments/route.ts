@@ -4,6 +4,7 @@ import { authOptions } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveTicketId } from "@/lib/resolve-ticket";
 import { extractMentions, findUserByMention, createNotification, isUserMentionable } from "@/lib/notifications";
+import { uploadFilesToSupabase } from "@/lib/file-upload";
 import type { EmailContext } from "@/lib/notifications";
 import type { Server } from "socket.io";
 
@@ -71,7 +72,14 @@ export async function POST(
     const { id: idOrKey } = await params;
     const id = await resolveTicketId(idOrKey);
     if (!id) return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
-    const { text, parentId, isInternal, attachments } = await req.json();
+
+    // Parse FormData to get text and files
+    const formData = await req.formData();
+    const text = formData.get("text") as string;
+    const parentId = formData.get("parentId") as string | null;
+    const isInternal = formData.get("isInternal") === "true";
+    const files = formData.getAll("files") as File[];
+
     if (!text || !text.trim()) {
       return NextResponse.json(
         { error: "Comment text is required" },
@@ -197,18 +205,28 @@ export async function POST(
       );
     }
 
-    // Save attachments if provided
-    if (attachments && Array.isArray(attachments) && attachments.length > 0) {
-      await prisma.issueAttachment.createMany({
-        data: attachments.map((att: any) => ({
-          issueId: id,
-          uploadedBy: session.user.id,
-          fileName: att.name,
-          fileUrl: `/api/attachments/${id}/${att.name}`, // Reference to file storage API
-          fileSize: att.size,
-          fileType: att.type || 'application/octet-stream',
-        })),
-      });
+    // Upload and save attachments if provided
+    if (files && files.length > 0) {
+      try {
+        // Upload files to Supabase Storage
+        const uploadedFiles = await uploadFilesToSupabase(files, id);
+
+        // Save file references to database
+        await prisma.issueAttachment.createMany({
+          data: uploadedFiles.map((file) => ({
+            issueId: id,
+            uploadedBy: session.user.id,
+            fileName: file.name,
+            fileUrl: file.url, // URL from Supabase Storage
+            fileSize: file.size,
+            fileType: file.type,
+          })),
+        });
+      } catch (uploadError) {
+        console.error("File upload failed:", uploadError);
+        // Continue with comment creation even if attachments fail
+        // Attachments will be retried or user can upload separately
+      }
     }
 
     // Broadcast the new comment to all users viewing this ticket via Socket.io

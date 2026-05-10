@@ -2,18 +2,20 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
+import { IssueCategory, IssuePriority, Prisma } from "@prisma/client";
 import { generateTicketKey } from "@/lib/ticket-key";
 import { classifyIssue } from "@/lib/ai/classify-issue";
 import { computeSimilarResolutions } from "@/lib/compute-similar-resolutions";
 import { calculateSLADeadline } from "@/lib/sla";
 import { sendEmail } from "@/lib/email";
 import { ticketCreatedEmail } from "@/lib/email-templates";
+import { uploadFilesToSupabase } from "@/lib/file-upload";
 
 interface CreateAttachmentInput {
-  name?: string;
-  size?: number;
-  type?: string;
+  name: string;
+  size: number;
+  type: string;
+  fileUrl: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -24,8 +26,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { title, description, priority, category, projectId, attachments } =
-      await req.json();
+    // Parse FormData instead of JSON
+    const formData = await req.formData();
+    const title = formData.get("title") as string;
+    const description = formData.get("description") as string;
+    const priority = formData.get("priority") as string;
+    const category = formData.get("category") as string;
+    const projectId = formData.get("projectId") as string;
+    const files = formData.getAll("files") as File[];
 
     if (!title || !description) {
       return NextResponse.json(
@@ -69,6 +77,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Create the ticket
+    const issuePriority = Object.values(IssuePriority).includes(priority as IssuePriority)
+      ? (priority as IssuePriority)
+      : IssuePriority.MEDIUM;
+    const issueCategory = Object.values(IssueCategory).includes(category as IssueCategory)
+      ? (category as IssueCategory)
+      : IssueCategory.BUG;
+
     let ticket = null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const ticketKey = await generateTicketKey(projectId);
@@ -77,8 +92,8 @@ export async function POST(req: NextRequest) {
           data: {
             title,
             description,
-            priority: priority || "MEDIUM",
-            category: category || "BUG",
+            priority: issuePriority,
+            category: issueCategory,
             status: "OPEN",
             raisedById: session.user.id,
             clientId: clientMember.clientId,
@@ -118,20 +133,34 @@ export async function POST(req: NextRequest) {
       console.error("AI classify failed:", e);
     }
 
-    // Save attachments if provided
-    if (attachments && Array.isArray(attachments) && attachments.length > 0) {
-      await prisma.issueAttachment.createMany({
-        data: (attachments as CreateAttachmentInput[])
-          .filter((att) => att.name)
-          .map((att) => ({
-          issueId: ticket.id,
-          uploadedBy: session.user.id,
-          fileName: att.name!,
-          fileUrl: `/api/attachments/${ticket.id}/${att.name}`, // Reference to file storage API
-          fileSize: att.size,
-          fileType: att.type || 'application/octet-stream',
-        })),
-      });
+    // Upload and save attachments if provided
+    if (files && files.length > 0) {
+      console.log(`📎 Processing ${files.length} attachments for ticket ${ticket.id}`);
+      try {
+        // Upload files to Supabase Storage
+        console.log("Uploading files to Supabase...");
+        const uploadedFiles = await uploadFilesToSupabase(files, ticket.id);
+        console.log(`✅ Uploaded ${uploadedFiles.length} files:`, uploadedFiles);
+
+        // Save file references to database
+        console.log("Saving attachment records to database...");
+        await prisma.issueAttachment.createMany({
+          data: uploadedFiles.map((file) => ({
+            issueId: ticket.id,
+            uploadedBy: session.user.id,
+            fileName: file.name,
+            fileUrl: file.url, // URL from Supabase Storage
+            fileSize: file.size,
+            fileType: file.type,
+          })),
+        });
+        console.log("✅ Attachment records saved successfully");
+      } catch (uploadError) {
+        console.error("❌ File upload failed:", uploadError);
+        console.error("Error details:", uploadError instanceof Error ? uploadError.message : uploadError);
+        // Continue with ticket creation even if attachments fail
+        // Attachments will be retried or user can upload separately
+      }
     }
 
     // Calculate SLA deadline

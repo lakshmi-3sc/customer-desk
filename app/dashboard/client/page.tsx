@@ -166,14 +166,22 @@ export default function ClientDashboard() {
   const categories = (reportsData?.categoryBreakdown ?? []).filter((c: any) => c.count > 0).slice(0, 5);
   const catMax = Math.max(...categories.map((c: any) => c.count), 1);
 
-  // Active users — derive ticket count from open tickets
+  // Active users — all team members sorted by open ticket count, filtered to current client members
+  const userIds = new Set(users.map((u: any) => u.id));
   const userTicketMap: Record<string, { name: string; email: string; open: number }> = {};
+
+  // Initialize all team members with 0 open tickets
+  users.forEach((u: any) => {
+    if (!userTicketMap[u.id]) userTicketMap[u.id] = { name: u.name, email: u.email || "", open: 0 };
+  });
+
+  // Count open tickets for each user
   tickets.forEach((t: any) => {
-    if (t.raisedBy?.id) {
-      if (!userTicketMap[t.raisedBy.id]) userTicketMap[t.raisedBy.id] = { name: t.raisedBy.name, email: "", open: 0 };
+    if (t.raisedBy?.id && userIds.has(t.raisedBy.id)) {
       userTicketMap[t.raisedBy.id].open++;
     }
   });
+
   const activeUsers = Object.values(userTicketMap).sort((a, b) => b.open - a.open).slice(0, 6);
 
   const kpis = [

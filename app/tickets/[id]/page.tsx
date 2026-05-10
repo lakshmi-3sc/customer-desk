@@ -36,6 +36,7 @@ export default async function TicketDetailPage({
         assignedTo: { select: { id: true, name: true, email: true } },
         project: { select: { id: true, name: true } },
         client: { select: { id: true, name: true } },
+        attachments: true,
       },
     }),
     prisma.comment.findMany({

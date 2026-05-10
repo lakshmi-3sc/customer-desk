@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { showSuccessToast, showErrorToast } from "@/lib/toast-helpers";
 import { ChevronRight, Paperclip, Loader2, X, AlertCircle, CheckCircle, Upload } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -134,42 +135,44 @@ export default function CreateTicketPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
-    setSuccess("");
 
-    if (!title.trim()) return setError("Title is required");
-    if (!description.trim()) return setError("Description is required");
-    if (!projectId) return setError("Please select a project");
+    if (!title.trim()) return showErrorToast("Title is required");
+    if (!description.trim()) return showErrorToast("Description is required");
+    if (!projectId) return showErrorToast("Please select a project");
 
     setLoading(true);
     try {
+      // Use FormData to send files + metadata
+      const formData = new FormData();
+      formData.append("title", title);
+      formData.append("description", description);
+      formData.append("priority", priority);
+      formData.append("category", category);
+      formData.append("projectId", projectId);
+
+      // Append actual File objects (not just metadata)
+      attachments.forEach((attachment) => {
+        if (attachment.file) {
+          formData.append("files", attachment.file);
+        }
+      });
+
       const res = await fetch("/api/dashboard/tickets/create", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title,
-          description,
-          priority,
-          category,
-          projectId,
-          attachments: attachments.map((a) => ({
-            name: a.name,
-            size: a.size,
-            type: a.type || 'application/octet-stream'
-          }))
-        }),
+        body: formData, // FormData automatically sets correct Content-Type
+        // Don't set Content-Type header - browser will set it with boundary
       });
 
       if (res.ok) {
         const data = await res.json();
-        setSuccess(`Issue created: ${data.ticketId ?? ""}`);
-        router.push(`/tickets/${data.ticketId ?? ""}`);
+        showSuccessToast(`Ticket ${data.ticketId} created!`, "Redirecting to ticket...");
+        setTimeout(() => router.push(`/tickets/${data.ticketId ?? ""}`), 1500);
       } else {
         const data = await res.json().catch(() => null);
-        setError(data?.error || "Failed to create issue. Please try again.");
+        showErrorToast(data?.error || "Failed to create ticket", "Please try again or contact support");
       }
     } catch {
-      setError("An unexpected error occurred.");
+      showErrorToast("Unexpected error occurred", "Please check your connection and try again");
     } finally {
       setLoading(false);
     }
@@ -306,7 +309,7 @@ export default function CreateTicketPage() {
                       setTitle(e.target.value);
                       if (error) setError("");
                     }}
-                    className="h-10 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus-visible:ring-[#0052CC]"
+                    className="h-10 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-500 focus-visible:ring-[#0052CC]"
                   />
                 </div>
 
@@ -325,7 +328,7 @@ export default function CreateTicketPage() {
                         if (error) setError("");
                       }}
                       rows={6}
-                      className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0052CC] focus:border-transparent resize-none"
+                      className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0052CC] focus:border-transparent resize-none"
                     />
                     <TicketSuggestions
                       query={description}

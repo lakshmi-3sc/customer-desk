@@ -29,6 +29,24 @@ interface Ticket {
   client?: { id: string; name: string } | null;
 }
 
+interface ProjectOption {
+  id: string;
+  name: string;
+  displayName?: string | null;
+  clientId?: string | null;
+}
+
+interface AdminClientOption {
+  id: string;
+  name: string;
+}
+
+interface DashboardUserOption {
+  id: string;
+  name: string;
+  role: string;
+}
+
 const generateTicketKey = (project: { name: string } | null, ticketId: string): string => {
   if (!project) return `TKT-${ticketId.slice(0, 8).toUpperCase()}`;
   const projectKey = project.name
@@ -85,6 +103,7 @@ function PriorityBadge({ priority }: { priority: string }) {
 }
 
 const selectCls = 'text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0052CC]/40 focus:border-[#0052CC] transition-colors min-w-max';
+const metaCellCls = 'px-4 py-2.5 text-xs font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap';
 
 function TicketsContent() {
   const router = useRouter();
@@ -98,7 +117,7 @@ function TicketsContent() {
   const [filterCategory, setFilterCategory] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
-  const [projects, setProjects] = useState<any[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
   const [filterAgent, setFilterAgent] = useState('');
@@ -193,13 +212,13 @@ function TicketsContent() {
     if (is3SCTeam) {
       fetch('/api/admin/customers')
         .then((r) => r.ok ? r.json() : { clients: [] })
-        .then((d) => setClients((d.clients ?? []).map((c: any) => ({ id: c.id, name: c.name }))))
+        .then((d: { clients?: AdminClientOption[] }) => setClients((d.clients ?? []).map((c) => ({ id: c.id, name: c.name }))))
         .catch(() => {});
     }
     if (!isLead) return;
     fetch('/api/dashboard/users')
       .then((r) => r.ok ? r.json() : [])
-      .then((users: any[]) => setAgents(users.filter((u) => u.role === 'THREESC_AGENT')))
+      .then((users: DashboardUserOption[]) => setAgents(users.filter((u) => u.role === 'THREESC_AGENT')))
       .catch(() => {});
   }, [is3SCTeam, isLead]);
 
@@ -213,8 +232,8 @@ function TicketsContent() {
         if (activeTab !== 'ALL') params.append('status', activeTab);
         const res = await fetch(`/api/dashboard/tickets?${params.toString()}`, { cache: 'no-store' });
         const data = await res.json();
-        setTickets((data.tickets || []).sort(
-          (a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        setTickets(((data.tickets || []) as Ticket[]).sort(
+          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
         ));
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
@@ -247,10 +266,10 @@ function TicketsContent() {
     new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
   return (
-    <div className="h-screen w-screen flex overflow-hidden bg-[#F8F9FB] dark:bg-slate-950">
+    <div className="h-screen w-screen flex overflow-hidden bg-[#F8F9FB] dark:bg-slate-950 font-sans">
       <AppSidebar />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden font-sans">
         <TopBar
           left={
             <div className="flex items-center gap-2 text-sm">
@@ -391,7 +410,7 @@ function TicketsContent() {
             {/* Table */}
             <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
               <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/30">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
                   {loading ? 'Loading…' : searchQuery
                     ? `${filteredTickets.length} result${filteredTickets.length !== 1 ? 's' : ''} for "${searchQuery}"`
                     : `${filteredTickets.length} issue${filteredTickets.length !== 1 ? 's' : ''}${hasActiveFilters ? ' (filtered)' : ''}`}
@@ -440,15 +459,15 @@ function TicketsContent() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-slate-100 dark:border-slate-800">
-                        <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-28">Key</th>
-                        <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Summary</th>
-                        <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-24">Priority</th>
-                        <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-28">Status</th>
-                        {is3SCTeam && <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-32">Customer</th>}
-                        <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-28">Agent</th>
-                        <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-20">Created</th>
-                        <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-20">SLA Due</th>
-                        <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-20">SLA</th>
+                        <th className="text-left px-4 py-2 text-[10px] font-semibold text-slate-400/90 dark:text-slate-500 uppercase tracking-wide w-28">Key</th>
+                        <th className="text-left px-4 py-2 text-[10px] font-semibold text-slate-400/90 dark:text-slate-500 uppercase tracking-wide">Summary</th>
+                        <th className="text-left px-4 py-2 text-[10px] font-semibold text-slate-400/90 dark:text-slate-500 uppercase tracking-wide w-24">Priority</th>
+                        <th className="text-left px-4 py-2 text-[10px] font-semibold text-slate-400/90 dark:text-slate-500 uppercase tracking-wide w-28">Status</th>
+                        {is3SCTeam && <th className="text-left px-4 py-2 text-[10px] font-semibold text-slate-400/90 dark:text-slate-500 uppercase tracking-wide w-32">Customer</th>}
+                        <th className="text-left px-4 py-2 text-[10px] font-semibold text-slate-400/90 dark:text-slate-500 uppercase tracking-wide w-28">Agent</th>
+                        <th className="text-left px-4 py-2 text-[10px] font-semibold text-slate-400/90 dark:text-slate-500 uppercase tracking-wide w-20">Created</th>
+                        <th className="text-left px-4 py-2 text-[10px] font-semibold text-slate-400/90 dark:text-slate-500 uppercase tracking-wide w-20">SLA Due</th>
+                        <th className="text-left px-4 py-2 text-[10px] font-semibold text-slate-400/90 dark:text-slate-500 uppercase tracking-wide w-20">SLA</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50 dark:divide-slate-800/60">
@@ -460,34 +479,34 @@ function TicketsContent() {
                             onClick={() => router.push(`/tickets/${key}`)}
                             className={`cursor-pointer transition-colors group hover:bg-slate-50 dark:hover:bg-slate-800/40 ${ticket.slaBreached ? 'border-l-[3px] border-l-red-500' : ticket.slaBreachRisk ? 'border-l-[3px] border-l-amber-400' : ''}`}
                           >
-                            <td className="px-4 py-3">
+                            <td className="px-4 py-2.5">
                               <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/50 font-mono text-[10px] font-semibold text-[#0052CC] dark:text-blue-400 tracking-wide">
                                 {key}
                               </span>
                             </td>
-                            <td className="px-4 py-3 max-w-xs">
-                              <span className="text-xs font-medium text-slate-800 dark:text-slate-200 group-hover:text-[#0052CC] dark:group-hover:text-blue-400 transition-colors line-clamp-1">
+                            <td className="px-4 py-2.5 max-w-xs">
+                              <span className="text-xs font-medium text-slate-700 dark:text-slate-300 group-hover:text-[#0052CC] dark:group-hover:text-blue-400 transition-colors line-clamp-1">
                                 {ticket.title}
                               </span>
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-4 py-2.5">
                               <PriorityBadge priority={ticket.priority} />
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-4 py-2.5">
                               <StatusLozenge status={ticket.status} />
                             </td>
                             {is3SCTeam && (
-                              <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400 truncate max-w-[128px]">{ticket.client?.name ?? '—'}</td>
+                              <td className={`${metaCellCls} max-w-[128px] truncate`}>{ticket.client?.name ?? '—'}</td>
                             )}
-                            <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                              {ticket.assignedTo?.name ?? <span className="text-slate-300 dark:text-slate-600 italic">Unassigned</span>}
+                            <td className={metaCellCls}>
+                              {ticket.assignedTo?.name ?? <span className="font-normal italic text-slate-400 dark:text-slate-500">Unassigned</span>}
                             </td>
-                            <td className="px-4 py-3 text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                            <td className={metaCellCls}>
                               {formatDateShort(ticket.createdAt)}
                             </td>
-                            <td className="px-4 py-3 text-xs whitespace-nowrap">
+                            <td className={metaCellCls}>
                               {ticket.slaDueAt ? (
-                                <span className={`flex items-center gap-1 ${ticket.slaBreached ? 'text-red-600 font-semibold' : ticket.slaBreachRisk ? 'text-amber-500 font-medium' : 'text-slate-400'}`}>
+                                <span className={`flex items-center gap-1 ${ticket.slaBreached ? 'text-red-600 dark:text-red-400' : ticket.slaBreachRisk ? 'text-amber-600 dark:text-amber-400' : ''}`}>
                                   {ticket.slaBreached && <ShieldAlert className="w-3 h-3" />}
                                   {ticket.slaBreachRisk && !ticket.slaBreached && <Clock className="w-3 h-3" />}
                                   {formatDateShort(ticket.slaDueAt)}
@@ -496,13 +515,13 @@ function TicketsContent() {
                                 <span className="text-slate-300 dark:text-slate-600">—</span>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-xs whitespace-nowrap">
+                            <td className={metaCellCls}>
                               {ticket.slaBreached ? (
-                                <span className="inline-flex items-center gap-1 text-red-600 dark:text-red-400 font-semibold"><ShieldAlert className="w-3 h-3" />Breached</span>
+                                <span className="inline-flex items-center gap-1 text-red-600 dark:text-red-400"><ShieldAlert className="w-3 h-3" />Breached</span>
                               ) : ticket.slaBreachRisk ? (
-                                <span className="text-amber-500 dark:text-amber-400 font-medium">At Risk</span>
+                                <span className="text-amber-600 dark:text-amber-400">At Risk</span>
                               ) : (
-                                <span className="text-emerald-500 dark:text-emerald-400">OK</span>
+                                <span className="text-emerald-600 dark:text-emerald-400">OK</span>
                               )}
                             </td>
                           </tr>

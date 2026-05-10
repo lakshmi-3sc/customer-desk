@@ -515,10 +515,15 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
   }, [ticket?.id]);
 
   const postComment = async (text: string, parentId?: string, isInternal?: boolean) => {
+    const formData = new FormData();
+    formData.append("text", text);
+    if (parentId) formData.append("parentId", parentId);
+    if (isInternal) formData.append("isInternal", "true");
+
     const response = await fetch(`/api/dashboard/tickets/${ticketId}/comments`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, ...(parentId ? { parentId } : {}), ...(isInternal ? { isInternal: true } : {}) }),
+      body: formData,
+      // Don't set Content-Type header - browser will set it with boundary
     });
     if (!response.ok) throw new Error("Failed to post comment");
     return (await response.json()).comment as Comment;
@@ -591,17 +596,19 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
     if (!commentText.trim() && commentAttachments.length === 0) return;
     setSubmittingComment(true);
     try {
+      // Create FormData with text and actual file objects
+      const formData = new FormData();
+      formData.append("text", commentText);
+
+      // Append actual File objects
+      commentAttachments.forEach((file) => {
+        formData.append("files", file);
+      });
+
       const response = await fetch(`/api/dashboard/tickets/${ticketId}/comments`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: commentText,
-          attachments: commentAttachments.map((file) => ({
-            name: file.name,
-            size: file.size,
-            type: file.type,
-          })),
-        }),
+        body: formData,
+        // Don't set Content-Type header - browser will set it with boundary
       });
       if (!response.ok) throw new Error("Failed to post comment");
       // Don't add comment here - let socket listener handle it to avoid duplicates
@@ -752,7 +759,7 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
     <div className="fixed inset-0 flex overflow-hidden">
       <AppSidebar />
 
-        <div className="min-w-0 flex-1 flex flex-col overflow-hidden bg-[#F8F9FB] dark:bg-slate-950">
+        <div className="min-w-0 flex-1 flex flex-col overflow-hidden bg-[#F8F9FB] dark:bg-slate-950 font-sans">
         {/* Top breadcrumb bar */}
         <TopBar
           left={
@@ -985,14 +992,15 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                           {commentAttachments.length > 0 && (
                             <div className="min-w-0 space-y-2 overflow-hidden bg-slate-50 dark:bg-slate-800/50 p-3 rounded-md border border-slate-200 dark:border-slate-700">
                               {commentAttachments.map((file, idx) => (
-                                <div key={idx} className="flex min-w-0 items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                                  <Paperclip className="w-3.5 h-3.5 text-slate-400" />
+                                <div key={idx} className="flex min-w-0 items-center gap-2.5 text-sm text-slate-700 dark:text-slate-300 px-2 py-1.5 rounded bg-white dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600">
+                                  <Paperclip className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
                                   <span className="min-w-0 flex-1 truncate">{file.name}</span>
-                                  <span className="text-xs text-slate-500">({(file.size / 1024).toFixed(1)} KB)</span>
+                                  <span className="text-xs text-slate-500 whitespace-nowrap flex-shrink-0">({(file.size / 1024).toFixed(1)} KB)</span>
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
                                   <button
                                     type="button"
                                     onClick={() => removeCommentAttachment(idx)}
-                                    className="p-0.5 text-slate-400 hover:text-red-600 transition-colors"
+                                    className="p-0.5 text-slate-400 hover:text-red-600 transition-colors flex-shrink-0"
                                   >
                                     <X className="w-3.5 h-3.5" />
                                   </button>
@@ -1463,18 +1471,9 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                         </div>
                       ) : prediction?.displayLabel ? (
                         <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{prediction.displayLabel}</p>
-                              <p className="text-[10px] text-slate-400 mt-0.5">estimated resolution time</p>
-                            </div>
-                            <span className={`text-[10px] font-semibold px-2 py-1 rounded-full ${
-                              prediction.confidence === 'High' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' :
-                              prediction.confidence === 'Medium' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' :
-                              'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                            }`}>
-                              {prediction.confidence} confidence
-                            </span>
+                          <div>
+                            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{prediction.displayLabel}</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">estimated resolution time</p>
                           </div>
 
                           <div className="bg-slate-50 dark:bg-slate-800 rounded-md p-2.5 space-y-1.5">
