@@ -20,24 +20,34 @@ export async function GET(request: NextRequest) {
     console.log(`[similar-tickets] Fetching for ticketId: ${ticketId}`);
 
     // Fetch pre-computed similar resolutions from database
-    const similarRecords = await prisma.similarResolution.findMany({
-      where: { issueId: ticketId },
-      orderBy: { similarityScore: "desc" },
-      take: 3,
-      include: {
-        similarResolved: {
-          select: {
-            id: true,
-            ticketKey: true,
-            title: true,
-            category: true,
-            priority: true,
-            resolvedAt: true,
-            assignedTo: { select: { name: true } },
+    let similarRecords: any[] = [];
+    try {
+      similarRecords = await prisma.similarResolution.findMany({
+        where: { issueId: ticketId },
+        orderBy: { similarityScore: "desc" },
+        take: 3,
+        include: {
+          similarResolved: {
+            select: {
+              id: true,
+              ticketKey: true,
+              title: true,
+              category: true,
+              priority: true,
+              resolvedAt: true,
+              assignedTo: { select: { name: true } },
+            },
           },
         },
-      },
-    });
+      });
+    } catch (err: any) {
+      if (err.code === 'P2021') {
+        console.log(`[similar-tickets] SimilarResolution table doesn't exist yet, skipping`);
+        similarRecords = [];
+      } else {
+        throw err;
+      }
+    }
 
     console.log(`[similar-tickets] Found ${similarRecords.length} similar records`);
 

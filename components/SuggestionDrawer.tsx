@@ -1,12 +1,24 @@
 "use client";
 
-import { X, BookOpen, Ticket, ChevronLeft, ChevronRight, Calendar, Tag, CheckCircle2 } from "lucide-react";
+import {
+  BookOpen,
+  Calendar,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  Lightbulb,
+  Tag,
+  Ticket,
+  X,
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 interface DrawerItem {
   id: string;
   type: "article" | "ticket";
   title: string;
+  ticketKey?: string | null;
   slug?: string;
   content?: string;
   description?: string;
@@ -37,6 +49,9 @@ export function SuggestionDrawer({
   const currentIndex = items.findIndex((i) => i.id === item.id);
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < items.length - 1;
+  const ticketHref = item.type === "ticket" ? `/tickets/${item.ticketKey ?? item.id}` : null;
+  const articleHref = item.type === "article" && item.slug ? `/knowledge-base/${item.slug}` : null;
+  const openHref = ticketHref ?? articleHref;
 
   const handlePrev = () => {
     if (hasPrev) onSelectItem(items[currentIndex - 1]);
@@ -48,29 +63,36 @@ export function SuggestionDrawer({
 
   return (
     <>
-      {/* Overlay - visual only, click X button to close */}
       <div
-        className="fixed inset-0 z-40 transition-opacity duration-300 bg-black/30 dark:bg-black/50 backdrop-blur-sm"
+        className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm transition-opacity duration-300 dark:bg-black/50"
         style={{ pointerEvents: "none" }}
         aria-hidden="true"
       />
 
-      {/* Drawer */}
-      <div className="fixed right-0 top-0 h-screen w-full max-w-lg bg-white dark:bg-slate-950 shadow-2xl z-50 flex flex-col overflow-hidden animate-in slide-in-from-right-96 duration-300">
-        {/* Header */}
-        <div className="relative px-6 py-5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+      <div className="fixed right-0 top-0 z-50 flex h-screen w-full max-w-2xl animate-in flex-col overflow-hidden bg-white shadow-2xl duration-300 slide-in-from-right-96 dark:bg-slate-950">
+        <div className="relative border-b border-slate-200 bg-white px-6 py-5 dark:border-slate-800 dark:bg-slate-900">
+          <div className="absolute inset-x-0 top-0 h-1 bg-[#0052CC]" />
           <div className="flex items-start justify-between gap-4">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
+            <div className="min-w-0 flex-1">
+              <div className="mb-2 flex items-center gap-2">
                 {item.type === "article" ? (
                   <>
-                    <BookOpen className="w-4 h-4 text-green-600 dark:text-green-400" />
-                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">Knowledge Article</span>
+                    <BookOpen className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                      Knowledge Article
+                    </span>
                   </>
                 ) : (
                   <>
-                    <Ticket className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">Resolved Ticket</span>
+                    <Ticket className="h-4 w-4 text-[#0052CC] dark:text-blue-400" />
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                      Resolved Ticket{" "}
+                      {item.ticketKey ? (
+                        <span className="font-mono text-[#0052CC] dark:text-blue-300">
+                          /{item.ticketKey}
+                        </span>
+                      ) : null}
+                    </span>
                   </>
                 )}
               </div>
@@ -78,26 +100,39 @@ export function SuggestionDrawer({
                 {item.title}
               </h2>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-shrink-0 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-slate-600 dark:text-slate-400"
-              aria-label="Close"
-            >
-              <X className="w-5 h-5" />
-            </button>
+
+            <div className="flex shrink-0 items-center gap-2">
+              {openHref && (
+                <a
+                  href={openHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-9 items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-[#0052CC] transition-colors hover:border-blue-300 hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/50"
+                >
+                  {item.type === "ticket" ? "Open ticket" : "Open article"}
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex h-9 w-9 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
-          {/* Progress indicator */}
           <div className="mt-3 flex items-center gap-2">
-            <div className="flex-1 flex gap-1">
+            <div className="flex flex-1 gap-1">
               {items.map((_, i) => (
                 <div
                   key={i}
                   className={`h-1 rounded-full transition-all ${
                     i === currentIndex
-                      ? "bg-[#0052CC] flex-grow"
-                      : "bg-slate-300 dark:bg-slate-600 flex-1"
+                      ? "flex-grow bg-[#0052CC]"
+                      : "flex-1 bg-slate-300 dark:bg-slate-600"
                   }`}
                 />
               ))}
@@ -108,46 +143,43 @@ export function SuggestionDrawer({
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-6">
+        <div className="flex-1 overflow-y-auto bg-slate-50/60 px-6 py-6 dark:bg-slate-950">
           {item.type === "article" ? (
-            <div className="space-y-4">
+            <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               {item.category && (
                 <div className="inline-flex items-center gap-2">
-                  <Tag className="w-4 h-4 text-slate-500" />
-                  <span className="text-xs font-semibold px-3 py-1 rounded-lg bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-400 uppercase tracking-wider">
+                  <Tag className="h-4 w-4 text-slate-500" />
+                  <span className="rounded-lg bg-green-100 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-green-700 dark:bg-green-950 dark:text-green-400">
                     {item.category}
                   </span>
                 </div>
               )}
-              <div className="prose dark:prose-invert max-w-none">
+              <div className="prose max-w-none dark:prose-invert">
                 <ReactMarkdown
                   components={{
                     h2: ({ children }) => (
-                      <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 mt-6 mb-3 pt-4 border-t border-slate-200 dark:border-slate-800 first:mt-0 first:pt-0 first:border-0">
+                      <h2 className="mb-3 mt-6 border-t border-slate-200 pt-4 text-lg font-bold text-slate-900 first:mt-0 first:border-0 first:pt-0 dark:border-slate-800 dark:text-slate-100">
                         {children}
                       </h2>
                     ),
                     h3: ({ children }) => (
-                      <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 mt-5 mb-2.5">
+                      <h3 className="mb-2.5 mt-5 text-base font-semibold text-slate-900 dark:text-slate-100">
                         {children}
                       </h3>
                     ),
                     p: ({ children }) => (
-                      <p className="text-slate-700 dark:text-slate-300 mb-3 leading-relaxed text-sm">
+                      <p className="mb-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
                         {children}
                       </p>
                     ),
-                    ul: ({ children }) => (
-                      <ul className="space-y-1.5 mb-3 ml-4">{children}</ul>
-                    ),
+                    ul: ({ children }) => <ul className="mb-3 ml-4 space-y-1.5">{children}</ul>,
                     li: ({ children }) => (
-                      <li className="text-slate-700 dark:text-slate-300 flex gap-3 before:content-['•'] before:text-[#0052CC] before:font-bold before:mr-1 text-sm">
+                      <li className="flex gap-3 text-sm text-slate-700 before:mr-1 before:font-bold before:text-[#0052CC] before:content-['•'] dark:text-slate-300">
                         {children}
                       </li>
                     ),
                     blockquote: ({ children }) => (
-                      <blockquote className="border-l-4 border-[#0052CC] bg-blue-50 dark:bg-blue-950/20 pl-4 py-3 my-4 italic text-slate-700 dark:text-slate-300">
+                      <blockquote className="my-4 border-l-4 border-[#0052CC] bg-blue-50 py-3 pl-4 text-slate-700 dark:bg-blue-950/20 dark:text-slate-300">
                         {children}
                       </blockquote>
                     ),
@@ -158,19 +190,18 @@ export function SuggestionDrawer({
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
-              {/* Status Badges */}
-              <div className="flex flex-wrap gap-2">
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-100 dark:bg-green-950 border border-green-200 dark:border-green-800">
-                  <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400" />
-                  <span className="text-xs font-semibold text-green-700 dark:text-green-400 uppercase tracking-wider">
+            <div className="space-y-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center gap-2 rounded-lg border border-green-200 bg-green-100 px-3 py-1.5 dark:border-green-800 dark:bg-green-950">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-green-700 dark:text-green-400">
                     {item.status || "Resolved"}
                   </span>
                 </div>
                 {item.resolvedAt && (
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                    <Calendar className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-                    <span className="text-xs text-slate-700 dark:text-slate-300 font-medium">
+                  <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                    <Calendar className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
                       {new Date(item.resolvedAt).toLocaleDateString("en-US", {
                         year: "numeric",
                         month: "long",
@@ -181,61 +212,61 @@ export function SuggestionDrawer({
                 )}
               </div>
 
-              {/* Problem Section */}
-              <div className="space-y-2">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100">
-                  Problem
-                </h3>
-                <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300 bg-red-50 dark:bg-red-950/20 p-3 rounded-lg border border-red-200 dark:border-red-900/40">
-                  {item.description || "No description available"}
-                </p>
+              <div className="grid gap-4">
+                <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Reported problem
+                    </h3>
+                  </div>
+                  <p className="p-4 text-sm leading-6 text-slate-700 dark:text-slate-300">
+                    {item.description || "No description available"}
+                  </p>
+                </section>
+
+                <section className="overflow-hidden rounded-lg border border-emerald-200 bg-white shadow-sm dark:border-emerald-900/60 dark:bg-slate-900">
+                  <div className="flex items-center gap-2 border-b border-emerald-100 bg-emerald-50 px-4 py-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                      Resolved outcome
+                    </h3>
+                  </div>
+                  <p className="p-4 text-sm leading-6 text-slate-700 dark:text-slate-300">
+                    {item.resolution || "No resolution summary was saved for this ticket. Open the ticket to review the full conversation."}
+                  </p>
+                </section>
               </div>
 
-              {/* Solution Section */}
-              {item.resolution && (
-                <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100">
-                    Solution
-                  </h3>
-                  <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300 bg-green-50 dark:bg-green-950/20 p-3 rounded-lg border border-green-200 dark:border-green-900/40">
-                    {item.resolution}
-                  </p>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/20">
+                <div className="flex gap-3">
+                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white text-amber-600 shadow-sm dark:bg-slate-900 dark:text-amber-400">
+                    <Lightbulb className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      Before creating this ticket
+                    </h3>
+                    <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                      Compare the issue with this resolved case. If it matches, try the resolved outcome first; if it still fails, continue creating the ticket.
+                    </p>
+                  </div>
                 </div>
-              )}
-
-              {/* Insight Section */}
-              <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100">
-                  💡 Before Creating
-                </h3>
-                <ul className="space-y-1.5 ml-4">
-                  <li className="text-slate-700 dark:text-slate-300 flex gap-3 before:content-['•'] before:text-[#0052CC] before:font-bold before:mr-1 text-sm">
-                    Compare with the problem above
-                  </li>
-                  <li className="text-slate-700 dark:text-slate-300 flex gap-3 before:content-['•'] before:text-[#0052CC] before:font-bold before:mr-1 text-sm">
-                    Try the suggested solution first
-                  </li>
-                  <li className="text-slate-700 dark:text-slate-300 flex gap-3 before:content-['•'] before:text-[#0052CC] before:font-bold before:mr-1 text-sm">
-                    Only create if issue persists
-                  </li>
-                </ul>
               </div>
             </div>
           )}
         </div>
 
-        {/* Footer - Non-blocking navigation */}
         <div
-          className="border-t border-slate-200 dark:border-slate-800 px-6 py-5 bg-slate-50 dark:bg-slate-900 flex items-center justify-between"
+          className="flex items-center justify-between border-t border-slate-200 bg-white px-6 py-4 dark:border-slate-800 dark:bg-slate-900"
           style={{ pointerEvents: "auto" }}
         >
           <button
             type="button"
             onClick={handlePrev}
             disabled={!hasPrev}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md dark:hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all text-slate-700 dark:text-slate-300 font-medium text-sm hover:text-slate-900 dark:hover:text-slate-100"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-all hover:border-blue-400 hover:text-slate-900 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-blue-500 dark:hover:text-slate-100"
           >
-            <ChevronLeft className="w-4 h-4" />
+            <ChevronLeft className="h-4 w-4" />
             Back
           </button>
 
@@ -249,10 +280,10 @@ export function SuggestionDrawer({
             type="button"
             onClick={handleNext}
             disabled={!hasNext}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 disabled:cursor-not-allowed transition-all text-white font-medium text-sm shadow-md hover:shadow-lg disabled:shadow-none"
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-md transition-all hover:bg-blue-700 hover:shadow-lg disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-slate-700"
           >
             Next
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="h-4 w-4" />
           </button>
         </div>
       </div>

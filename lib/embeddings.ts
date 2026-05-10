@@ -1,59 +1,64 @@
 /**
- * Real semantic embeddings using the configured embedding endpoint
+ * Semantic embeddings using Voyage AI (recommended by Anthropic)
  * Generates 1024-dimensional vectors for pgvector similarity search
+ * - One-time embedding of resolved tickets/KB articles (stored in pgvector)
+ * - Query-only embedding when user creates new ticket (minimal API calls)
+ * - Hybrid search: keyword filter + vector similarity
  */
 
-const ANTHROPIC_VERSION = "2023-06-01";
-const EMBEDDING_MODEL = process.env.ANTHROPIC_EMBEDDING_MODEL ?? "claude-3-5-sonnet-20241022";
+const VOYAGE_MODEL = "voyage-3";
+const VOYAGE_API_URL = "https://api.voyageai.com/v1/embeddings";
 
-type EmbeddingResponse = {
-  embedding?: number[];
-  embeddings?: number[][];
-  data?: Array<{ embedding?: number[] }>;
+type VoyageEmbeddingResponse = {
+  data: Array<{ embedding: number[] }>;
+  usage: { total_tokens: number };
 };
 
 /**
- * Generate embedding for text using Anthropic's embedding model
- * Returns a 1024-dimensional vector compatible with pgvector
+ * Generate embedding using Voyage AI
+ * Returns 1024-dimensional vector for pgvector
+ * Cost-efficient: Free tier = 50K tokens/month (~10K embeddings)
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
   if (!text || !text.trim()) {
     throw new Error("Text cannot be empty");
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error("ANTHROPIC_API_KEY environment variable is not set");
+  if (!process.env.VOYAGE_API_KEY) {
+    console.warn(`[embeddings] VOYAGE_API_KEY not set, using keyword-only search`);
+    return new Array(1024).fill(0);
   }
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/embeddings", {
+    const response = await fetch(VOYAGE_API_URL, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": ANTHROPIC_VERSION,
+        authorization: `Bearer ${process.env.VOYAGE_API_KEY}`,
       },
       body: JSON.stringify({
-        model: EMBEDDING_MODEL,
         input: text.trim(),
+        model: VOYAGE_MODEL,
       }),
     });
 
     if (!response.ok) {
       const detail = await response.text();
-      throw new Error(`Embedding API failed (${response.status}): ${detail}`);
+      console.error(`[embeddings] Voyage API error (${response.status}):`, detail);
+      throw new Error(`Voyage API failed: ${detail}`);
     }
 
-    const data = (await response.json()) as EmbeddingResponse;
-    const embedding = data.embedding ?? data.embeddings?.[0] ?? data.data?.[0]?.embedding;
+    const data = (await response.json()) as VoyageEmbeddingResponse;
+    const embedding = data.data?.[0]?.embedding;
 
-    if (Array.isArray(embedding) && embedding.every((value) => typeof value === "number")) {
+    if (Array.isArray(embedding) && embedding.every((val) => typeof val === "number")) {
+      console.debug(`[embeddings] Generated embedding (${embedding.length}D, tokens: ${data.usage.total_tokens})`);
       return embedding;
     }
 
-    throw new Error("No embedding returned from Anthropic API");
+    throw new Error("No embedding in Voyage response");
   } catch (error) {
-    console.error(`Failed to generate embedding for text: "${text.substring(0, 50)}..."`, error);
+    console.error(`[embeddings] Failed to generate embedding:`, error);
     throw error;
   }
 }

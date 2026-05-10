@@ -8,6 +8,7 @@ interface Suggestion {
   id: string;
   type: "ticket" | "article";
   title: string;
+  ticketKey?: string | null;
   status?: string;
   resolvedAt?: string;
   category?: string;

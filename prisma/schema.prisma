@@ -126,7 +126,7 @@ model Issue {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   ticketKey        String?           @unique
-  embedding        Unsupported("vector(1024)")? // pgvector - 1024D embeddings (Anthropic model)
+  embedding        Unsupported("vector(1024)")? // pgvector native type - use raw SQL for vector operations
   comments         Comment[]
   assignedTo       User?             @relation("AssignedTo", fields: [assignedToId], references: [id])
   client           Client            @relation(fields: [clientId], references: [id])
@@ -222,7 +222,7 @@ model KnowledgeBase {
   isInternal  Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  embedding   Unsupported("vector(1024)")? // pgvector - 1024D embeddings (Anthropic model)
+  embedding   Unsupported("vector(1024)")? // pgvector native type - use raw SQL for vector operations
   client      Client?  @relation(fields: [clientId], references: [id])
   createdBy   User     @relation(fields: [createdById], references: [id])
   feedback    KnowledgeBaseFeedback[]

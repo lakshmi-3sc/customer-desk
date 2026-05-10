@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Bell, X, AlertTriangle, MessageSquare, ArrowRight, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -24,7 +25,14 @@ export function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [mounted, setMounted] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [panelPosition, setPanelPosition] = useState({ top: 0, right: 0 });
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const fetchNotifications = async () => {
     try {
@@ -69,12 +77,20 @@ export function NotificationBell() {
   };
 
   const handleOpen = () => {
+    if (!open && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setPanelPosition({
+        top: rect.bottom + 8,
+        right: window.innerWidth - rect.right,
+      });
+    }
     setOpen(!open);
   };
 
   return (
-    <div className="relative" ref={panelRef}>
+    <div className="relative">
       <button
+        ref={buttonRef}
         onClick={handleOpen}
         className="relative flex items-center justify-center w-8 h-8 rounded-md text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
         aria-label="Notifications"
@@ -87,8 +103,9 @@ export function NotificationBell() {
         )}
       </button>
 
-      {open && (
-        <div className="absolute right-0 top-10 w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden">
+      {open && mounted && (
+        createPortal(
+        <div className="fixed w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-[99999] overflow-hidden" style={{top: `${panelPosition.top}px`, right: `${panelPosition.right}px`}}>
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Notifications</h3>
@@ -164,7 +181,9 @@ export function NotificationBell() {
               </button>
             </div>
           )}
-        </div>
+        </div>,
+        document.body
+        )
       )}
     </div>
   );

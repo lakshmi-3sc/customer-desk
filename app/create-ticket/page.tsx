@@ -30,6 +30,7 @@ interface SuggestionItem {
   id: string;
   type: "article" | "ticket";
   title: string;
+  ticketKey?: string | null;
   slug?: string;
   content?: string;
   description?: string;
@@ -208,7 +209,7 @@ export default function CreateTicketPage() {
     <div className="h-screen w-screen flex overflow-hidden bg-[#F8F9FB] dark:bg-slate-950">
       <AppSidebar />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden relative">
         {/* Top bar */}
         <TopBar
           left={
@@ -233,7 +234,7 @@ export default function CreateTicketPage() {
         />
 
         {/* Content */}
-        <main className="flex-1 overflow-hidden">
+        <main className="flex-1 overflow-hidden relative z-0">
           <div className="max-w-3xl mx-auto overflow-y-auto h-full p-6">
             <div className="mb-6">
               <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">

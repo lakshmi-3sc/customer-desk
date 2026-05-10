@@ -5,6 +5,7 @@ import { authOptions } from "@/auth";
 import { generateEmbedding } from "@/lib/embeddings";
 import { classifyIssue } from "@/lib/ai/classify-issue";
 import { Anthropic } from "@anthropic-ai/sdk";
+import { Prisma } from "@prisma/client";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -14,6 +15,7 @@ interface Candidate {
   id: string;
   type: "ticket" | "article";
   title: string;
+  ticketKey?: string | null;
   slug?: string | null;
   content: string;
   category?: string | null;
@@ -31,6 +33,131 @@ interface AIRecommendation {
   reasoning: string;
 }
 
+function normalizeSearchText(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function uniqueCandidates(candidates: Candidate[]): Candidate[] {
+  const seen = new Set<string>();
+  return candidates.filter((candidate) => {
+    const key = `${candidate.type}:${candidate.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+async function getUserClientIds(userId: string): Promise<string[]> {
+  const clientMembers = await prisma.clientMember.findMany({
+    where: { userId },
+    select: { clientId: true },
+  });
+
+  return clientMembers.map((cm) => cm.clientId);
+}
+
+async function getLatestVisibleResolutionMap(
+  issueIds: string[],
+  role: string
+): Promise<Map<string, string>> {
+  if (issueIds.length === 0) return new Map();
+
+  const comments = await prisma.comment.findMany({
+    where: {
+      issueId: { in: issueIds },
+      ...(role.startsWith("CLIENT") ? { isInternal: false } : {}),
+    },
+    select: {
+      issueId: true,
+      content: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const resolutionByIssueId = new Map<string, string>();
+  for (const comment of comments) {
+    const content = comment.content.trim();
+    if (content && !resolutionByIssueId.has(comment.issueId)) {
+      resolutionByIssueId.set(comment.issueId, content);
+    }
+  }
+
+  return resolutionByIssueId;
+}
+
+async function getExactMatchResults(
+  query: string,
+  userId: string,
+  role: string
+): Promise<Candidate[]> {
+  const normalizedQuery = normalizeSearchText(query);
+  if (normalizedQuery.length < 12) return [];
+
+  try {
+    const userClientIds = await getUserClientIds(userId);
+    const tickets = await prisma.issue.findMany({
+      where: {
+        status: "RESOLVED",
+        OR: [
+          { title: { equals: query, mode: "insensitive" } },
+          { description: { equals: query, mode: "insensitive" } },
+          { description: { contains: query, mode: "insensitive" } },
+        ],
+      },
+      select: {
+        id: true,
+        ticketKey: true,
+        title: true,
+        description: true,
+        status: true,
+        resolvedAt: true,
+        clientId: true,
+        comments: {
+          where: role.startsWith("CLIENT") ? { isInternal: false } : undefined,
+          select: {
+            content: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
+      take: 5,
+    });
+
+    return tickets
+      .filter((ticket) => {
+        if (ticket.clientId && userClientIds.length > 0 && !userClientIds.includes(ticket.clientId)) {
+          return false;
+        }
+
+        const normalizedTitle = normalizeSearchText(ticket.title);
+        const normalizedDescription = normalizeSearchText(ticket.description);
+
+        return (
+          normalizedTitle === normalizedQuery ||
+          normalizedDescription === normalizedQuery ||
+          (normalizedQuery.length >= 24 && normalizedDescription.includes(normalizedQuery))
+        );
+      })
+      .map((ticket) => ({
+        id: ticket.id,
+        ticketKey: ticket.ticketKey,
+        title: ticket.title,
+        content: ticket.description,
+        type: "ticket" as const,
+        status: ticket.status,
+        resolvedAt: ticket.resolvedAt,
+        resolution: ticket.comments[0]?.content,
+        similarity: 1,
+      }));
+  } catch (err) {
+    console.error("[exact-match-error]", err);
+    return [];
+  }
+}
+
 async function getFullTextSearchResults(
   query: string,
   userId: string,
@@ -41,11 +168,7 @@ async function getFullTextSearchResults(
   // Get user's associated clients
   let userClientIds: string[] = [];
   try {
-    const clientMembers = await prisma.clientMember.findMany({
-      where: { userId },
-      select: { clientId: true },
-    });
-    userClientIds = clientMembers.map((cm) => cm.clientId);
+    userClientIds = await getUserClientIds(userId);
   } catch (err) {
     console.error("[get-client-ids-error]", err);
   }
@@ -59,12 +182,14 @@ async function getFullTextSearchResults(
       },
       select: {
         id: true,
+        ticketKey: true,
         title: true,
         description: true,
         status: true,
         resolvedAt: true,
         clientId: true,
         comments: {
+          where: role.startsWith("CLIENT") ? { isInternal: false } : undefined,
           select: {
             id: true,
             content: true,
@@ -96,15 +221,13 @@ async function getFullTextSearchResults(
       })
       .map((t) => ({
         id: t.id,
+        ticketKey: t.ticketKey,
         title: t.title,
         content: t.description,
         type: "ticket" as const,
         status: t.status,
         resolvedAt: t.resolvedAt,
-        resolution:
-          t.comments && t.comments.length > 0
-            ? t.comments[0].content
-            : "This ticket has been resolved. Check the ticket details for more information.",
+        resolution: t.comments[0]?.content,
       }))
       .slice(0, 15);
   } catch (err) {
@@ -286,9 +409,10 @@ async function semanticRankCandidates(
     if (results.length < 3) {
       try {
         // Fetch all resolved tickets with embeddings
-        const allTickets = await prisma.$queryRaw<Array<{ id: string; title: string; description: string; status: string; resolvedAt: string | null; clientId: string; similarity: number }>>`
+        const allTickets = await prisma.$queryRaw<Array<{ id: string; ticketKey: string | null; title: string; description: string; status: string; resolvedAt: string | null; clientId: string; similarity: number }>>`
           SELECT
             id,
+            "ticketKey",
             title,
             description,
             status,
@@ -317,27 +441,34 @@ async function semanticRankCandidates(
           WHERE
             "isPublished" = true
             AND embedding IS NOT NULL
-            ${role.startsWith("CLIENT") ? "AND \"isInternal\" = false" : ""}
+            ${role.startsWith("CLIENT") ? Prisma.sql`AND "isInternal" = false` : Prisma.empty}
           ORDER BY similarity DESC
           LIMIT 20
         `;
 
+        const visibleTickets = allTickets.filter(
+          (t) =>
+            !t.clientId ||
+            userClientIds.length === 0 ||
+            userClientIds.includes(t.clientId)
+        );
+        const resolutionByTicketId = await getLatestVisibleResolutionMap(
+          visibleTickets.map((ticket) => ticket.id),
+          role
+        );
+
         // Filter by access control
         const filteredAllCandidates: Candidate[] = [
-          ...allTickets
-            .filter(
-              (t) =>
-                !t.clientId ||
-                userClientIds.length === 0 ||
-                userClientIds.includes(t.clientId)
-            )
+          ...visibleTickets
             .map((t) => ({
               id: t.id,
+              ticketKey: t.ticketKey,
               title: t.title,
               content: t.description,
               type: "ticket" as const,
               status: t.status,
               resolvedAt: t.resolvedAt,
+              resolution: resolutionByTicketId.get(t.id),
               similarity: t.similarity,
               embedding: undefined,
             })),
@@ -414,27 +545,56 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Step 1: Full-text search (keyword filtering) - lenient approach
-    const candidates = await getFullTextSearchResults(query, userId, role);
+    // Step 1: Exact duplicate check - no embedding/API call needed for obvious repeats.
+    const exactMatches = await getExactMatchResults(query, userId, role);
+
+    // Step 2: Full-text search (keyword filtering) - still local and cheap.
+    const keywordMatches = exactMatches.length > 0
+      ? []
+      : await getFullTextSearchResults(query, userId, role);
+    const candidates = uniqueCandidates([...exactMatches, ...keywordMatches]);
 
     let ranked: Candidate[] = [];
 
-    // Step 2: Semantic ranking with pgvector (hybrid + fallback)
-    // Always try semantic search - even if keyword filtering returns 0 results
-    ranked = await semanticRankCandidates(query, candidates, userId, role);
-
-    // Step 3: Claude ranking for final ordering (if we have candidates)
-    if (ranked.length > 0) {
-      ranked = await rankResultsWithClaude(query, ranked);
+    // Step 3: Semantic ranking with pgvector only when local matching is not confident enough.
+    // Use Voyage AI for semantic search (recommended by Anthropic, free tier available).
+    if (exactMatches.length > 0) {
+      ranked = exactMatches.slice(0, 5);
+    } else if (candidates.length >= 3) {
+      ranked = candidates.slice(0, 5);
+    } else {
+      try {
+        if (process.env.VOYAGE_API_KEY) {
+          ranked = await semanticRankCandidates(query, candidates, userId, role);
+        } else {
+          // Fallback to keyword-only results (Claude will rank them)
+          console.warn("[ticket-suggestions] VOYAGE_API_KEY not set, using keyword-only search");
+          ranked = candidates.slice(0, 5);
+        }
+      } catch (err) {
+        console.warn("[ticket-suggestions] Semantic search failed, falling back to keyword results:", err);
+        ranked = candidates.slice(0, 5);
+      }
     }
 
-    // Step 4: Separate and limit results
+    // Step 4: Claude ranking for final ordering (skip for exact duplicates to save tokens)
+    if (ranked.length > 0 && exactMatches.length === 0) {
+      try {
+        ranked = await rankResultsWithClaude(query, ranked);
+      } catch (err) {
+        console.warn("[ticket-suggestions] Claude ranking failed, using unranked results:", err);
+        // Continue with unranked results
+      }
+    }
+
+    // Step 5: Separate and limit results
     const tickets = ranked
       .filter((r) => r.type === "ticket")
       .slice(0, 3)
       .map((t) => ({
         id: t.id,
         type: "ticket",
+        ticketKey: t.ticketKey,
         title: t.title,
         status: t.status,
         resolvedAt: t.resolvedAt,
@@ -454,21 +614,23 @@ export async function GET(request: NextRequest) {
         content: a.content,
       }));
 
-    // Step 5: AI classification (non-blocking, async in background)
+    // Step 6: AI classification (skip for exact duplicates; the existing ticket already explains it)
     let aiSuggestion: AIRecommendation | null = null;
-    try {
-      const classification = await classifyIssue(query, query);
-      if (classification) {
-        aiSuggestion = {
-          category: classification.category,
-          priority: classification.priority,
-          confidence: 0.85, // Default confidence
-          reasoning: classification.reasoning || "Based on ticket analysis",
-        };
+    if (exactMatches.length === 0) {
+      try {
+        const classification = await classifyIssue(query, query);
+        if (classification) {
+          aiSuggestion = {
+            category: classification.category,
+            priority: classification.priority,
+            confidence: 0.85, // Default confidence
+            reasoning: classification.reasoning || "Based on ticket analysis",
+          };
+        }
+      } catch (aiErr) {
+        console.error("[ai-classification-error]", aiErr);
+        // Continue without AI suggestion
       }
-    } catch (aiErr) {
-      console.error("[ai-classification-error]", aiErr);
-      // Continue without AI suggestion
     }
 
     return NextResponse.json({ tickets, articles, aiSuggestion });
