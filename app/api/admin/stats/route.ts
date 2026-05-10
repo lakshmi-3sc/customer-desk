@@ -20,20 +20,10 @@ export async function GET(request: Request) {
   const last30 = new Date(now.getTime() - 30 * 86400000);
 
   const clientWhere = clientId ? { clientId } : {};
-  const openStatuses = ['OPEN', 'IN_PROGRESS', 'ACKNOWLEDGED'] as const;
   const clientSql = clientId ? Prisma.sql`AND "clientId" = ${clientId}` : Prisma.empty;
 
   const [
-    totalIssues,
-    openIssues,
-    slaBreached,
-    criticalPriorityIssues,
-    highPriorityIssues,
-    slaAtRiskIssues,
-    criticalSlaAtRisk,
-    unassignedIssues,
-    staleIssues,
-    unassignedOver4h,
+    issueSummaryRaw,
     issuesByDay,
     resolvedIssuesByDay,
     topCategoriesRaw,
@@ -44,40 +34,56 @@ export async function GET(request: Request) {
     unrespondedOver24hRaw,
     frtCurrentRaw,
     frtPrevRaw,
-    openIssuesPrev,
-    criticalPrev,
-    unassignedPrev,
   ] = await Promise.all([
-    prisma.issue.count({ where: { ...clientWhere } }),
-    prisma.issue.count({ where: { ...clientWhere, status: { in: [...openStatuses] } } }),
-    prisma.issue.count({ where: { ...clientWhere, slaBreached: true } }),
-    prisma.issue.count({ where: { ...clientWhere, priority: 'CRITICAL', status: { in: [...openStatuses] } } }),
-    prisma.issue.count({ where: { ...clientWhere, priority: 'HIGH', status: { in: [...openStatuses] } } }),
-    prisma.issue.count({
-      where: {
-        ...clientWhere,
-        slaBreached: false,
-        status: { in: [...openStatuses] },
-        slaDueAt: { lte: new Date(now.getTime() + 2 * 3600000), gte: now },
-      },
-    }),
+    prisma.$queryRaw<Array<{
+      totalIssues: bigint;
+      openIssues: bigint;
+      slaBreached: bigint;
+      criticalPriorityIssues: bigint;
+      slaAtRiskIssues: bigint;
+      criticalSlaAtRisk: bigint;
+      unassignedIssues: bigint;
+      staleIssues: bigint;
+      unassignedOver4h: bigint;
+      openIssuesPrev: bigint;
+      criticalPrev: bigint;
+      unassignedPrev: bigint;
+    }>>`
+      SELECT
+        COUNT(*) AS "totalIssues",
+        COUNT(*) FILTER (WHERE status IN ('OPEN', 'IN_PROGRESS', 'ACKNOWLEDGED')) AS "openIssues",
+        COUNT(*) FILTER (WHERE "slaBreached" = true) AS "slaBreached",
+        COUNT(*) FILTER (WHERE priority = 'CRITICAL' AND status IN ('OPEN', 'IN_PROGRESS', 'ACKNOWLEDGED')) AS "criticalPriorityIssues",
+        COUNT(*) FILTER (
+          WHERE "slaBreached" = false
+            AND status IN ('OPEN', 'IN_PROGRESS', 'ACKNOWLEDGED')
+            AND "slaDueAt" <= ${new Date(now.getTime() + 2 * 3600000)}
+            AND "slaDueAt" >= ${now}
+        ) AS "slaAtRiskIssues",
+        COUNT(*) FILTER (
+          WHERE priority = 'CRITICAL'
+            AND "slaBreached" = false
+            AND status IN ('OPEN', 'IN_PROGRESS', 'ACKNOWLEDGED')
+            AND "slaDueAt" <= ${new Date(now.getTime() + 2 * 3600000)}
+            AND "slaDueAt" >= ${now}
+        ) AS "criticalSlaAtRisk",
+        COUNT(*) FILTER (WHERE status IN ('OPEN', 'IN_PROGRESS', 'ACKNOWLEDGED') AND "assignedToId" IS NULL) AS "unassignedIssues",
+        COUNT(*) FILTER (
+          WHERE status IN ('OPEN', 'IN_PROGRESS', 'ACKNOWLEDGED')
+            AND "createdAt" <= ${new Date(now.getTime() - 7 * 86400000)}
+        ) AS "staleIssues",
+        COUNT(*) FILTER (
+          WHERE status IN ('OPEN', 'ACKNOWLEDGED')
+            AND "assignedToId" IS NULL
+            AND "createdAt" <= ${new Date(now.getTime() - 4 * 3600000)}
+        ) AS "unassignedOver4h",
+        COUNT(*) FILTER (WHERE "createdAt" >= ${prevRangeStart} AND "createdAt" < ${rangeStart}) AS "openIssuesPrev",
+        COUNT(*) FILTER (WHERE priority = 'CRITICAL' AND "createdAt" >= ${prevRangeStart} AND "createdAt" < ${rangeStart}) AS "criticalPrev",
+        COUNT(*) FILTER (WHERE "assignedToId" IS NULL AND "createdAt" >= ${prevRangeStart} AND "createdAt" < ${rangeStart}) AS "unassignedPrev"
+      FROM "Issue"
+      WHERE 1 = 1 ${clientSql}
+    `,
     // Critical issues that are ALSO nearing SLA — most urgent possible combination
-    prisma.issue.count({
-      where: {
-        ...clientWhere,
-        priority: 'CRITICAL',
-        slaBreached: false,
-        status: { in: [...openStatuses] },
-        slaDueAt: { lte: new Date(now.getTime() + 2 * 3600000), gte: now },
-      },
-    }),
-    prisma.issue.count({ where: { ...clientWhere, status: { in: [...openStatuses] }, assignedToId: null } }),
-    prisma.issue.count({
-      where: { ...clientWhere, status: { in: [...openStatuses] }, createdAt: { lte: new Date(now.getTime() - 7 * 86400000) } },
-    }),
-    prisma.issue.count({
-      where: { ...clientWhere, status: { in: ['OPEN', 'ACKNOWLEDGED'] }, assignedToId: null, createdAt: { lte: new Date(now.getTime() - 4 * 3600000) } },
-    }),
     // Created per day
     prisma.$queryRaw<{ day: string; count: bigint }[]>`
       SELECT TO_CHAR(DATE("createdAt" AT TIME ZONE 'UTC'), 'YYYY-MM-DD') as day, COUNT(*) as count
@@ -195,13 +201,21 @@ export async function GET(request: Request) {
       WHERE i.status IN ('RESOLVED', 'CLOSED')
       AND i."createdAt" >= ${prevRangeStart} AND i."createdAt" < ${rangeStart} ${clientSql}
     `,
-    // Previous period open issues count
-    prisma.issue.count({ where: { ...clientWhere, createdAt: { gte: prevRangeStart, lt: rangeStart } } }),
-    // Previous period critical count
-    prisma.issue.count({ where: { ...clientWhere, priority: 'CRITICAL', createdAt: { gte: prevRangeStart, lt: rangeStart } } }),
-    // Previous period unassigned count
-    prisma.issue.count({ where: { ...clientWhere, assignedToId: null, createdAt: { gte: prevRangeStart, lt: rangeStart } } }),
   ]);
+
+  const issueSummary = issueSummaryRaw[0];
+  const totalIssues = Number(issueSummary?.totalIssues ?? 0);
+  const openIssues = Number(issueSummary?.openIssues ?? 0);
+  const slaBreached = Number(issueSummary?.slaBreached ?? 0);
+  const criticalPriorityIssues = Number(issueSummary?.criticalPriorityIssues ?? 0);
+  const slaAtRiskIssues = Number(issueSummary?.slaAtRiskIssues ?? 0);
+  const criticalSlaAtRisk = Number(issueSummary?.criticalSlaAtRisk ?? 0);
+  const unassignedIssues = Number(issueSummary?.unassignedIssues ?? 0);
+  const staleIssues = Number(issueSummary?.staleIssues ?? 0);
+  const unassignedOver4h = Number(issueSummary?.unassignedOver4h ?? 0);
+  const openIssuesPrev = Number(issueSummary?.openIssuesPrev ?? 0);
+  const criticalPrev = Number(issueSummary?.criticalPrev ?? 0);
+  const unassignedPrev = Number(issueSummary?.unassignedPrev ?? 0);
 
   // Extract FRT values (already fetched in Promise.all above)
   let avgFrtHours: number | null = null;

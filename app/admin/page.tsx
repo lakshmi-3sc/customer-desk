@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Users, AlertCircle, Zap, Bell, Activity,
-  RefreshCw, ChevronRight, ArrowUpRight, Bot,
+  ChevronRight, ArrowUpRight, Bot,
   CheckCircle, AlertTriangle, XCircle, Clock, Timer, ShieldAlert,
-  UserX, Flame, Cpu, CheckCheck,
+  UserX,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -120,7 +120,6 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [days, setDays] = useState(30);
   const [customerFilter, setCustomerFilter] = useState('');
   const [feed, setFeed] = useState<FeedEntry[]>([]);
@@ -147,23 +146,18 @@ export default function AdminDashboard() {
       if (res.ok) setStats(await res.json());
       else console.error('Admin stats API error:', res.status, await res.text());
     } catch (e) { console.error('Admin stats fetch failed:', e); }
-    finally { setLoading(false); setRefreshing(false); }
+    finally { setLoading(false); }
   };
 
   useEffect(() => { fetchStats(); fetchActivity(); }, []);
 
   const handleDaysChange = (d: number) => {
-    setDays(d); setRefreshing(true); setLoading(true); fetchStats(d);
+    setDays(d); setLoading(true); fetchStats(d);
   };
 
   const handleCustomerChange = (cId: string) => {
-    setCustomerFilter(cId); setRefreshing(true); setLoading(true); setFeedLoading(true);
+    setCustomerFilter(cId); setLoading(true); setFeedLoading(true);
     fetchStats(undefined, cId); fetchActivity(cId);
-  };
-
-  const refresh = () => {
-    setRefreshing(true); setLoading(true); setFeedLoading(true);
-    fetchStats(); fetchActivity();
   };
 
   const chartData = stats?.volumeByDay ?? [];
