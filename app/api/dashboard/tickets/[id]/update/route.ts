@@ -163,6 +163,58 @@ export async function PUT(
       },
     });
 
+    // Create audit history entries for changed fields
+    const changedFields: Array<{
+      fieldChanged: string;
+      oldValue: string | null;
+      newValue: string | null;
+    }> = [];
+
+    if (status !== undefined && status !== ticket.status) {
+      changedFields.push({
+        fieldChanged: 'status',
+        oldValue: ticket.status,
+        newValue: status,
+      });
+    }
+
+    if (priority !== undefined && priority !== ticket.priority) {
+      changedFields.push({
+        fieldChanged: 'priority',
+        oldValue: ticket.priority,
+        newValue: priority,
+      });
+    }
+
+    if (category !== undefined && category !== ticket.category) {
+      changedFields.push({
+        fieldChanged: 'category',
+        oldValue: ticket.category,
+        newValue: category,
+      });
+    }
+
+    if (assignedToId !== undefined && assignedToId !== ticket.assignedToId) {
+      changedFields.push({
+        fieldChanged: 'assignedToId',
+        oldValue: ticket.assignedToId ?? null,
+        newValue: assignedToId ?? null,
+      });
+    }
+
+    // Create IssueHistory records for each changed field
+    for (const field of changedFields) {
+      await prisma.issueHistory.create({
+        data: {
+          issueId: id,
+          fieldChanged: field.fieldChanged,
+          oldValue: field.oldValue,
+          newValue: field.newValue,
+          changedById: currentUser.id,
+        },
+      });
+    }
+
     // Generate embedding if ticket was just resolved (async, non-blocking).
     // The pgvector field is Unsupported in Prisma, so check it through raw SQL.
     const shouldGenerateEmbedding =

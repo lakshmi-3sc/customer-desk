@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   ChevronRight,
+  ChevronDown,
   Send,
   Loader2,
+  Sparkles,
   User,
   Calendar,
   AlertCircle,
@@ -19,7 +21,6 @@ import {
   Bot,
   TriangleAlert,
   Lock,
-  Lightbulb,
   Copy,
   Mail,
   AtSign,
@@ -32,6 +33,7 @@ import { useSession } from "next-auth/react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
 import { getSocket } from "@/lib/socket-client";
+import { extractCopilotDiagnostic } from "@/lib/resolution-copilot";
 
 interface Attachment {
   id: string;
@@ -41,6 +43,17 @@ interface Attachment {
   fileType: string | null;
   uploadedBy: string;
   createdAt: string;
+}
+
+interface TicketHistoryEntry {
+  id: string;
+  fieldChanged: string;
+  oldValue: string | null;
+  newValue: string | null;
+  createdAt: string;
+  changedBy?: {
+    name: string;
+  } | null;
 }
 
 interface Ticket {
@@ -227,7 +240,7 @@ interface CommentNodeProps {
   submittingReply: boolean;
   onReplyClick: (id: string, name: string) => void;
   onReplyTextChange: (v: string) => void;
-  onReplySubmit: (e: React.FormEvent) => void;
+  onReplySubmit: () => void;
   getInitials: (name: string) => string;
   formatDate: (d: string) => string;
   currentUserName: string;
@@ -261,7 +274,7 @@ function CommentNode({
           </button>
 
           {isReplying && (
-            <form onSubmit={onReplySubmit} className="mt-2 space-y-2">
+            <div className="mt-2 space-y-2">
               <div className="flex gap-2 items-start">
                 <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-1">
                   {getInitials(currentUserName)}
@@ -281,7 +294,8 @@ function CommentNode({
                   />
                   <div className="flex justify-end mt-1">
                     <Button
-                      type="submit"
+                      type="button"
+                      onClick={onReplySubmit}
                       disabled={submittingReply || !replyText.trim()}
                       className="bg-[#0052CC] hover:bg-[#0747A6] text-white text-xs h-7 px-3"
                     >
@@ -290,7 +304,7 @@ function CommentNode({
                   </div>
                 </div>
               </div>
-            </form>
+            </div>
           )}
         </div>
       </div>
@@ -344,6 +358,8 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
   const [conversationSummary, setConversationSummary] = useState<string | null>(
     initialTicket.conversationSummary
   );
+  const [summaryStale, setSummaryStale] = useState(false);
+  const [summaryExpanded, setSummaryExpanded] = useState(false);
 
   const [commentText, setCommentText] = useState("");
   const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(null);
@@ -356,7 +372,7 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
   const [detailTab, setDetailTab] = useState<'conversation' | 'internal' | 'attachments' | 'history'>('conversation');
   const [commentAttachments, setCommentAttachments] = useState<File[]>([]);
   const commentFileInputRef = useRef<HTMLInputElement>(null);
-  const [ticketHistory, setTicketHistory] = useState<any[]>([]);
+  const [ticketHistory, setTicketHistory] = useState<TicketHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [slaCountdown, setSlaCountdown] = useState<string>('');
   const [mentionSuggestions, setMentionSuggestions] = useState<UserType[]>([]);
@@ -388,6 +404,8 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
   const [routingLoading, setRoutingLoading] = useState(false);
   const [routingExpanded, setRoutingExpanded] = useState(false);
   const [routingAiSummary, setRoutingAiSummary] = useState('');
+  const copilotDiagnostic = extractCopilotDiagnostic(ticket.aiSummary);
+  const [copilotExpanded, setCopilotExpanded] = useState(false);
 
   // Resolution prediction state
   type PredictionData = {
@@ -408,6 +426,14 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
   };
   const [prediction, setPrediction] = useState<PredictionData | null>(null);
   const [predictionLoading, setPredictionLoading] = useState(false);
+  const cleanedConversationSummary = conversationSummary
+    ? conversationSummary
+        .replace(/\*\*/g, '')
+        .replace(/\*/g, '')
+        .replace(/#+\s/g, '')
+        .trim()
+    : "";
+  const isLongConversationSummary = cleanedConversationSummary.length > 320;
 
   // Similar resolutions state
   type SimilarResolution = {
@@ -489,6 +515,7 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
     });
     // Listen for new comments - socket is the single source of truth
     socket.on("comment:added", (newComment: Comment) => {
+      setSummaryStale(true);
       setComments((prev) => {
         // Prevent duplicates by checking if ID already exists
         if (prev.some((c) => c.id === newComment.id)) {
@@ -591,8 +618,7 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
     setCommentAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleAddComment = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddComment = async () => {
     if (!commentText.trim() && commentAttachments.length === 0) return;
     setSubmittingComment(true);
     try {
@@ -613,6 +639,7 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
       if (!response.ok) throw new Error("Failed to post comment");
       // Don't add comment here - let socket listener handle it to avoid duplicates
       // Comment will appear via socket.io "comment:added" event
+      setSummaryStale(true);
       setCommentText("");
       setCommentAttachments([]);
     } catch (error) {
@@ -622,13 +649,13 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
     }
   };
 
-  const handleAddReply = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddReply = async () => {
     if (!replyText.trim() || !replyTo) return;
     setSubmittingReply(true);
     try {
       const comment = await postComment(replyText, replyTo.id);
       setComments((prev) => addReplyToTree(prev, { ...comment, replies: [] }));
+      setSummaryStale(true);
       setReplyText("");
       setReplyTo(null);
     } catch (error) {
@@ -683,13 +710,13 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
     } catch {} finally { setEscalating(false); }
   };
 
-  const handleAddInternalNote = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddInternalNote = async () => {
     if (!internalText.trim()) return;
     setSubmittingInternal(true);
     try {
       const comment = await postComment(internalText, undefined, true);
       setComments((prev) => [...prev, { ...comment, replies: [], isInternal: true }]);
+      setSummaryStale(true);
       setInternalText('');
     } catch {} finally { setSubmittingInternal(false); }
   };
@@ -727,17 +754,20 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
   }, [ticket?.id, ticket?.assignedTo?.id, is3SCTeam]);
 
   const loadConversationSummary = async () => {
-    if (!ticket || conversationSummary) return;
+    if (!ticket) return;
+    if (conversationSummary && !summaryStale) return;
     setSummaryLoading(true);
     try {
       const res = await fetch(`/api/dashboard/summarize-conversation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticketId: ticket.id })
+        body: JSON.stringify({ ticketId: ticket.id, force: summaryStale })
       });
       if (res.ok) {
         const data = await res.json();
         setConversationSummary(data.summary);
+        setSummaryStale(false);
+        setSummaryExpanded(false);
       }
     } catch (e) {
       console.error('Failed to generate summary:', e);
@@ -780,7 +810,7 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
           <div className="h-full min-w-0 flex gap-6 px-6 py-6 overflow-hidden">
 
               {/* Left column: ticket header + description + activity */}
-              <div className="flex-[2] min-w-0 overflow-y-auto overflow-x-hidden pr-1">
+              <div className="flex-[2] min-w-0 space-y-4 overflow-y-auto overflow-x-hidden pr-1">
 
                 {/* Ticket header */}
                 <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 p-6">
@@ -823,17 +853,115 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                       </span>
                     </div>
                   )}
-                </div>
-
-                {/* Description */}
-                <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 p-6">
-                  <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 uppercase tracking-wide mb-3">Description</h2>
-                  <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
-                    {ticket.description || <span className="text-slate-400 italic">No description provided</span>}
-                  </p>
+                  <div className="mt-5 border-t border-slate-100 pt-5 dark:border-slate-800">
+                    <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 uppercase tracking-wide mb-3">Description</h2>
+                    <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
+                      {ticket.description || <span className="text-slate-400 italic">No description provided</span>}
+                    </p>
+                  </div>
                 </div>
 
                 {/* Activity / Comments — tabbed */}
+                {is3SCTeam && copilotDiagnostic && (
+                  <div className="overflow-hidden rounded-md border border-blue-200 bg-white shadow-sm dark:border-blue-900/60 dark:bg-slate-900">
+                    <button
+                      type="button"
+                      onClick={() => setCopilotExpanded((open) => !open)}
+                      aria-expanded={copilotExpanded}
+                      className="flex w-full items-start justify-between gap-3 border-b border-blue-100 bg-blue-50 px-4 py-3 text-left transition-colors hover:bg-blue-100/70 dark:border-blue-900/50 dark:bg-blue-950/30 dark:hover:bg-blue-950/50"
+                    >
+                      <div className="flex min-w-0 items-start gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#0052CC] text-white">
+                          <Bot className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-bold text-slate-900 dark:text-slate-100">Resolution Copilot Package</p>
+                            <span className="rounded-full bg-white px-2.5 py-0.5 text-xs font-semibold text-[#0052CC] ring-1 ring-blue-200 dark:bg-slate-900 dark:text-blue-300 dark:ring-blue-900/60">
+                              {copilotDiagnostic.confidence}% confidence
+                            </span>
+                          </div>
+                          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Customer completed guided intake before creating this ticket</p>
+                          {!copilotExpanded && (
+                            <p className="mt-2 line-clamp-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                              {copilotDiagnostic.likelyCause}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <span className="mt-1 inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[#0052CC] dark:text-blue-300">
+                        {copilotExpanded ? "Hide" : "Show"} details
+                        <ChevronDown className={`h-4 w-4 transition-transform ${copilotExpanded ? "rotate-180" : ""}`} />
+                      </span>
+                    </button>
+
+                    {copilotExpanded && (
+                      <>
+                        <div className="grid gap-4 p-4 md:grid-cols-[1fr_0.95fr]">
+                          <div className="space-y-3">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Likely cause</p>
+                              <p className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-slate-900 dark:text-slate-100">{copilotDiagnostic.likelyCause}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Suggested action</p>
+                              <p className="mt-1 line-clamp-3 text-sm leading-5 text-slate-700 dark:text-slate-300">{copilotDiagnostic.suggestedAction}</p>
+                            </div>
+                            {copilotDiagnostic.similarTicket && (
+                              <div className="flex flex-wrap items-center gap-2 text-sm">
+                                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Similar:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => window.open(`/tickets/${copilotDiagnostic.similarTicket?.ticketKey ?? copilotDiagnostic.similarTicket?.id}`, "_blank", "noopener,noreferrer")}
+                                  className="font-semibold text-[#0052CC] hover:underline dark:text-blue-300"
+                                >
+                                  {copilotDiagnostic.similarTicket.ticketKey ?? copilotDiagnostic.similarTicket.id} - {copilotDiagnostic.similarTicket.title}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Customer confirmed</p>
+                            {copilotDiagnostic.confirmedFacts.length > 0 ? (
+                              <ul className="mt-2 grid gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+                                {copilotDiagnostic.confirmedFacts.map((fact) => (
+                                  <li key={fact} className="flex gap-2">
+                                    <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                                    <span className="line-clamp-2">{fact}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="mt-1 text-sm text-slate-500">No answers captured.</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/60 md:flex-row md:items-start md:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Suggested reply</p>
+                            <p className="mt-1 line-clamp-3 text-sm leading-5 text-slate-700 dark:text-slate-300">{copilotDiagnostic.suggestedReply}</p>
+                            {copilotDiagnostic.agentSummary && (
+                              <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-500 dark:text-slate-400">{copilotDiagnostic.agentSummary}</p>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCommentText(copilotDiagnostic.suggestedReply);
+                              setDetailTab("conversation");
+                            }}
+                            className="shrink-0 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0052CC] hover:bg-blue-50 dark:border-blue-900/60 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-blue-950/40"
+                          >
+                            Use reply
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
                 <div className="min-w-0 overflow-hidden bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 flex flex-col">
                   {/* Tab switcher */}
                   <div className="flex border-b border-slate-200 dark:border-slate-800 px-4 pt-1 overflow-x-auto">
@@ -872,23 +1000,28 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                         <div className="flex justify-end">
                           <button
                             onClick={loadConversationSummary}
-                            disabled={summaryLoading || conversationSummary !== null}
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={summaryLoading || (conversationSummary !== null && !summaryStale)}
+                            className="flex items-center gap-1.5 rounded-md border border-purple-200 bg-purple-50 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-purple-800 dark:bg-purple-950/40 dark:hover:bg-purple-900/50"
                           >
                           {summaryLoading ? (
                             <>
-                              <Loader2 className="w-4 h-4 animate-spin text-purple-600 dark:text-purple-400" />
-                              <span className="text-sm font-medium text-purple-700 dark:text-purple-400">Generating summary...</span>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-600 dark:text-purple-400" />
+                              <span className="text-purple-700 dark:text-purple-400">Generating...</span>
                             </>
-                          ) : conversationSummary ? (
+                          ) : conversationSummary && !summaryStale ? (
                             <>
-                              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                              <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Summary generated</span>
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                              <span className="text-emerald-600 dark:text-emerald-400">Summary ready</span>
+                            </>
+                          ) : conversationSummary && summaryStale ? (
+                            <>
+                              <Sparkles className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                              <span className="text-amber-700 dark:text-amber-400">Regenerate</span>
                             </>
                           ) : (
                             <>
-                              <Bot className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                              <span className="text-sm font-medium text-purple-700 dark:text-purple-400">Summarize with AI</span>
+                              <Sparkles className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                              <span className="text-purple-700 dark:text-purple-400">Summarize</span>
                             </>
                           )}
                           </button>
@@ -896,23 +1029,38 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                       )}
 
                       {conversationSummary && (
-                        <div className="p-5 bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-950/30 dark:to-blue-950/20 rounded-lg border border-purple-200 dark:border-purple-800 shadow-sm">
-                          <div className="flex items-start gap-3">
-                            <div className="p-2 bg-purple-100 dark:bg-purple-900/40 rounded-lg flex-shrink-0">
-                              <Lightbulb className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-bold text-purple-700 dark:text-purple-300 uppercase tracking-wide mb-3">
-                                AI Summary
+                        <div className="rounded-lg border border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50 p-4 shadow-sm dark:border-purple-800 dark:from-purple-950/30 dark:to-blue-950/20">
+                          <div className="min-w-0">
+                              <div className="mb-3 flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2">
+                                  <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                                  <p className="text-xs font-bold uppercase tracking-wide text-purple-700 dark:text-purple-300">
+                                    Summary
+                                  </p>
+                                  {summaryStale && (
+                                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+                                      May be outdated
+                                    </span>
+                                  )}
+                                </div>
+                                {isLongConversationSummary && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSummaryExpanded((expanded) => !expanded)}
+                                    className="shrink-0 text-xs font-semibold text-[#0052CC] hover:underline dark:text-blue-300"
+                                  >
+                                    {summaryExpanded ? "Show less" : "Show full"}
+                                  </button>
+                                )}
+                              </div>
+                            <p className={`text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap break-words ${isLongConversationSummary && !summaryExpanded ? "line-clamp-3" : ""}`}>
+                              {cleanedConversationSummary}
+                            </p>
+                            {summaryStale && (
+                              <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">
+                                New activity was added after this summary. Regenerate when you need the latest thread view.
                               </p>
-                              <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap break-words">
-                                {conversationSummary
-                                  .replace(/\*\*/g, '')
-                                  .replace(/\*/g, '')
-                                  .replace(/#+\s/g, '')
-                                  .trim()}
-                              </p>
-                            </div>
+                            )}
                           </div>
                         </div>
                       )}
@@ -944,7 +1092,7 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                         <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center text-xs font-bold flex-shrink-0">
                           {session?.user?.name ? getInitials(session.user.name) : "?"}
                         </div>
-                        <form onSubmit={handleAddComment} className="min-w-0 flex-1 space-y-2">
+                        <div className="min-w-0 flex-1 space-y-2">
                           <Label htmlFor="comment" className="sr-only">Add a comment</Label>
                           <div className="relative">
                             <textarea
@@ -1024,7 +1172,8 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                               </button>
                             </div>
                             <Button
-                              type="submit"
+                              type="button"
+                              onClick={handleAddComment}
                               disabled={submittingComment || !commentText.trim()}
                               className="bg-[#0052CC] hover:bg-[#0747A6] text-white text-sm h-8 px-4"
                             >
@@ -1035,7 +1184,7 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                               )}
                             </Button>
                           </div>
-                        </form>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1069,7 +1218,7 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                           <p className="text-sm text-slate-400">No internal notes yet</p>
                         </div>
                       )}
-                      <form onSubmit={handleAddInternalNote} className="flex gap-3">
+                      <div className="flex gap-3">
                         <div className="w-8 h-8 rounded-full bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
                           {session?.user?.name ? getInitials(session.user.name) : "?"}
                         </div>
@@ -1082,13 +1231,13 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                             className="w-full px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-md text-sm text-slate-900 dark:text-white placeholder:text-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
                           />
                           <div className="flex justify-end mt-2">
-                            <Button type="submit" disabled={submittingInternal || !internalText.trim()}
+                            <Button type="button" onClick={handleAddInternalNote} disabled={submittingInternal || !internalText.trim()}
                               className="bg-amber-500 hover:bg-amber-600 text-white text-sm h-8 px-4">
                               {submittingInternal ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Lock className="w-3 h-3 mr-1.5" />Add Note</>}
                             </Button>
                           </div>
                         </div>
-                      </form>
+                      </div>
                     </div>
                   )}
 
@@ -1141,7 +1290,7 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                           <p className="text-sm text-slate-400">No history recorded yet</p>
                         </div>
                       ) : (
-                        ticketHistory.map((entry: any) => (
+                        ticketHistory.map((entry) => (
                           <div key={entry.id} className="px-6 py-3 flex items-start gap-3">
                             <div className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0 mt-0.5">
                               <History className="w-2.5 h-2.5 text-slate-400" />
@@ -1237,7 +1386,15 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                 <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 p-4 space-y-4">
                   {/* Priority */}
                   <div>
-                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Priority</p>
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Priority</p>
+                      {is3SCTeam && ticket.aiPriority && ticket.aiPriority !== ticket.priority && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-blue-950/30 dark:text-slate-300">
+                          <Sparkles className="h-3 w-3 text-[#0052CC] dark:text-blue-300" />
+                          AI <span className="font-semibold text-[#0052CC] dark:text-blue-300">{ticket.aiPriority}</span>
+                        </span>
+                      )}
+                    </div>
                     {is3SCTeam ? (
                       <select value={ticket.priority} onChange={(e) => handleUpdateField('priority', e.target.value)} disabled={updatingField === 'priority'} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0052CC] disabled:opacity-50">
                         <option value="CRITICAL">Critical</option>
@@ -1246,30 +1403,21 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                         <option value="LOW">Low</option>
                       </select>
                     ) : <PriorityBadge priority={ticket.priority} />}
-                    {is3SCTeam && ticket.aiPriority && ticket.aiPriority !== ticket.priority && (
-                      <div className="mt-2 rounded-md border border-blue-100 bg-blue-50/70 px-2.5 py-2 text-xs dark:border-blue-900/50 dark:bg-blue-950/20">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-slate-600 dark:text-slate-300">
-                            AI suggests <span className="font-semibold text-[#0052CC] dark:text-blue-300">{ticket.aiPriority}</span>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateField('priority', ticket.aiPriority!)}
-                            disabled={updatingField === 'priority'}
-                            className="text-[11px] font-semibold text-[#0052CC] hover:underline disabled:opacity-50"
-                          >
-                            Apply
-                          </button>
-                        </div>
-                      </div>
-                    )}
                   </div>
 
                   <div className="border-t border-slate-100 dark:border-slate-800" />
 
                   {/* Category */}
                   <div>
-                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Category</p>
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Category</p>
+                      {is3SCTeam && ticket.aiCategory && ticket.aiCategory !== ticket.category && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-blue-950/30 dark:text-slate-300">
+                          <Sparkles className="h-3 w-3 text-[#0052CC] dark:text-blue-300" />
+                          AI <span className="font-semibold text-[#0052CC] dark:text-blue-300">{ticket.aiCategory.replace(/_/g, ' ')}</span>
+                        </span>
+                      )}
+                    </div>
                     {is3SCTeam ? (
                       <select value={ticket.category} onChange={(e) => handleUpdateField('category', e.target.value)} disabled={updatingField === 'category'} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0052CC] disabled:opacity-50">
                         <option value="FEATURE_REQUEST">Feature Request</option>
@@ -1280,26 +1428,6 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                       </select>
                     ) : (
                       <span className="inline-block text-xs px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">{ticket.category.replace(/_/g, ' ')}</span>
-                    )}
-                    {is3SCTeam && ticket.aiCategory && ticket.aiCategory !== ticket.category && (
-                      <div className="mt-2 rounded-md border border-blue-100 bg-blue-50/70 px-2.5 py-2 text-xs dark:border-blue-900/50 dark:bg-blue-950/20">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-slate-600 dark:text-slate-300">
-                            AI suggests <span className="font-semibold text-[#0052CC] dark:text-blue-300">{ticket.aiCategory.replace(/_/g, ' ')}</span>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateField('category', ticket.aiCategory!)}
-                            disabled={updatingField === 'category'}
-                            className="text-[11px] font-semibold text-[#0052CC] hover:underline disabled:opacity-50"
-                          >
-                            Apply
-                          </button>
-                        </div>
-                        {ticket.aiSummary && (
-                          <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-slate-500 dark:text-slate-400">{ticket.aiSummary}</p>
-                        )}
-                      </div>
                     )}
                   </div>
                 </div>
@@ -1324,22 +1452,22 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                       )}
                     </div>
 
-                    <div className="p-4">
+                    <div className="p-3">
                       {routingLoading ? (
                         <div className="flex items-center gap-2 py-2">
                           <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
                           <span className="text-xs text-slate-400">AI analysing expertise &amp; workload…</span>
                         </div>
                       ) : routingBest ? (
-                        <div className="space-y-3">
+                        <div className="space-y-2">
                           {routingAiSummary && (
-                            <div className="flex items-start gap-1.5 bg-blue-50 dark:bg-blue-950/30 rounded-md px-3 py-2">
+                            <div className="flex items-start gap-1.5 bg-blue-50 dark:bg-blue-950/30 rounded-md px-2.5 py-2">
                               <Bot className="w-3.5 h-3.5 text-[#0052CC] dark:text-blue-400 flex-shrink-0 mt-0.5" />
-                              <p className="text-[10px] text-slate-600 dark:text-slate-300 leading-snug">{routingAiSummary}</p>
+                              <p className="line-clamp-2 text-[10px] text-slate-600 dark:text-slate-300 leading-snug">{routingAiSummary}</p>
                             </div>
                           )}
 
-                          <div className="rounded-lg border-2 border-[#0052CC]/20 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 p-3">
+                          <div className="rounded-lg border border-[#0052CC]/20 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 p-3">
                             <div className="flex items-center gap-2 mb-2">
                               <div className="w-8 h-8 rounded-full bg-[#0747A6] text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
                                 {getInitials(routingBest.name)}
@@ -1354,10 +1482,10 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                             </div>
 
                             {routingBest.aiReason && (
-                              <p className="text-[10px] text-slate-500 dark:text-slate-400 italic mb-2 leading-snug">"{routingBest.aiReason}"</p>
+                              <p className="line-clamp-2 text-[10px] text-slate-500 dark:text-slate-400 italic mb-2 leading-snug">&quot;{routingBest.aiReason}&quot;</p>
                             )}
 
-                            <div className="grid grid-cols-2 gap-2 mb-3">
+                            <div className="grid grid-cols-2 gap-2 mb-2">
                               <div className="bg-white dark:bg-slate-800 rounded p-2 text-center">
                                 <p className="text-base font-bold text-[#0052CC] dark:text-blue-400">{routingBest.categoryResolved}</p>
                                 <p className="text-[10px] text-slate-500 leading-tight">{ticket?.category?.replace(/_/g, ' ')} resolved</p>
@@ -1370,7 +1498,7 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                               </div>
                             </div>
 
-                            <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center justify-between mb-2">
                               <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                                 routingBest.expertiseLabel === 'Expert' ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300' :
                                 routingBest.expertiseLabel === 'Experienced' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' :
@@ -1387,7 +1515,7 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                             <button
                               onClick={() => handleUpdateField('assignee', routingBest.id)}
                               disabled={updatingField === 'assignee' || ticket?.assignedTo?.id === routingBest.id}
-                              className={`w-full py-2 text-xs font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5 ${
+                              className={`w-full py-1.5 text-xs font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5 ${
                                 ticket?.assignedTo?.id === routingBest.id
                                   ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 cursor-default'
                                   : 'bg-[#0052CC] hover:bg-[#0747A6] text-white disabled:opacity-50'
@@ -1419,7 +1547,7 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                                   }`}>{agent.expertiseLabel}</span>
                                 </div>
                                 {agent.aiReason && (
-                                  <p className="text-[10px] text-slate-400 italic mb-1 leading-snug">"{agent.aiReason}"</p>
+                                  <p className="text-[10px] text-slate-400 italic mb-1 leading-snug">&quot;{agent.aiReason}&quot;</p>
                                 )}
                                 <span className="text-[10px] text-slate-500">{agent.categoryResolved} resolved · {agent.openCount} open</span>
                                 <div className="w-full h-1 bg-slate-100 dark:bg-slate-700 rounded-full mt-1.5">
@@ -1453,48 +1581,47 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                 {/* Resolution Time Prediction — 3SC team only, not for resolved/closed tickets */}
                 {is3SCTeam && ticket?.status !== 'RESOLVED' && ticket?.status !== 'CLOSED' && (
                   <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 overflow-hidden">
-                    <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+                    <div className="px-3 py-2.5 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
                       <div className="w-6 h-6 rounded-md bg-emerald-600 flex items-center justify-center">
                         <Clock className="w-3.5 h-3.5 text-white" />
                       </div>
                       <div>
                         <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">Resolution Prediction</p>
-                        <p className="text-[10px] text-slate-400">AI + historical data</p>
+                        <p className="text-[10px] text-slate-400">historical estimate</p>
                       </div>
                     </div>
 
-                    <div className="p-4">
+                    <div className="p-3">
                       {predictionLoading ? (
                         <div className="flex items-center gap-2 py-1">
                           <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
                           <span className="text-xs text-slate-400">Calculating…</span>
                         </div>
                       ) : prediction?.displayLabel ? (
-                        <div className="space-y-3">
-                          <div>
-                            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{prediction.displayLabel}</p>
-                            <p className="text-[10px] text-slate-400 mt-0.5">estimated resolution time</p>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{prediction.displayLabel}</p>
+                              <p className="text-[10px] text-slate-400">estimated resolution</p>
+                            </div>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              prediction.confidence === 'high'
+                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                : prediction.confidence === 'medium'
+                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                            }`}>
+                              {prediction.confidence}
+                            </span>
                           </div>
 
-                          <div className="bg-slate-50 dark:bg-slate-800 rounded-md p-2.5 space-y-1.5">
+                          <div className="bg-slate-50 dark:bg-slate-800 rounded-md px-2.5 py-2 space-y-1">
                             <div className="flex justify-between text-[10px]">
                               <span className="text-slate-500">Global avg ({prediction.inputs.globalSampleSize} tickets)</span>
                               <span className="font-medium text-slate-700 dark:text-slate-300">
                                 {prediction.inputs.globalAvgHrs !== null ? `${prediction.inputs.globalAvgHrs}h` : 'N/A'}
                               </span>
                             </div>
-                            <div className="flex justify-between text-[10px]">
-                              <span className="text-slate-500">Agent personal avg</span>
-                              <span className="font-medium text-slate-700 dark:text-slate-300">
-                                {prediction.inputs.agentAvgHrs !== null ? `${prediction.inputs.agentAvgHrs}h` : 'No history'}
-                              </span>
-                            </div>
-                            {prediction.inputs.workloadPenaltyPct > 0 && (
-                              <div className="flex justify-between text-[10px]">
-                                <span className="text-amber-600 dark:text-amber-400">Workload penalty</span>
-                                <span className="font-medium text-amber-600 dark:text-amber-400">+{prediction.inputs.workloadPenaltyPct}%</span>
-                              </div>
-                            )}
                             <div className="border-t border-slate-200 dark:border-slate-700 pt-1 flex justify-between text-[10px]">
                               <span className="text-slate-500 font-semibold">Adjusted baseline</span>
                               <span className="font-bold text-slate-800 dark:text-slate-200">
@@ -1502,10 +1629,6 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                               </span>
                             </div>
                           </div>
-
-                          <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug italic">
-                            "{prediction.breakdown}"
-                          </p>
                         </div>
                       ) : (
                         <p className="text-xs text-slate-400 py-1 text-center">Not enough data to predict</p>
@@ -1514,63 +1637,6 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                   </div>
                 )}
 
-                {/* Similar Resolved Tickets — 3SC team only */}
-                {is3SCTeam && (
-                  <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 overflow-hidden">
-                    <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-md bg-blue-600 flex items-center justify-center">
-                        <Lightbulb className="w-3.5 h-3.5 text-white" />
-                      </div>
-                      <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">Similar Resolved</p>
-                    </div>
-
-                    <div className="p-3">
-                      {similarLoading ? (
-                        <div className="flex items-center gap-2 py-1">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
-                          <span className="text-[10px] text-slate-400">Searching…</span>
-                        </div>
-                      ) : similarResolutions.length > 0 ? (
-                        <div className="space-y-2">
-                          {similarResolutions.map((sim) => (
-                            <div key={sim.id} className="p-2 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 space-y-2">
-                              <button
-                                onClick={() => router.push(`/tickets/${sim.ticketKey ?? sim.id}`)}
-                                className="w-full text-left group"
-                              >
-                                <div className="flex items-start justify-between gap-2 mb-1">
-                                  <p className="text-[10px] font-medium text-slate-900 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 line-clamp-2 flex-1">
-                                    {sim.title}
-                                  </p>
-                                  <span className="text-[9px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 px-1.5 py-0.5 rounded flex-shrink-0">
-                                    {sim.similarityScore}%
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-1.5 text-[9px] text-slate-500">
-                                  <span className="inline-block px-1 py-0.5 bg-slate-100 dark:bg-slate-800 rounded">
-                                    {sim.category.replace(/_/g, " ")}
-                                  </span>
-                                  <span>•</span>
-                                  <span>{sim.priority}</span>
-                                </div>
-                              </button>
-                              {sim.resolutionHints && sim.resolutionHints.length > 0 && (
-                                <div className="pt-1 border-t border-slate-200 dark:border-slate-700">
-                                  <p className="text-[9px] font-semibold text-slate-700 dark:text-slate-300 mb-1">How it was resolved:</p>
-                                  <p className="text-[9px] text-slate-600 dark:text-slate-400 line-clamp-3 leading-relaxed">
-                                    {sim.resolutionHints[0]}
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-[10px] text-slate-400 py-2 text-center">No similar resolved tickets</p>
-                      )}
-                    </div>
-                  </div>
-                )}
 
                 {/* Escalation — Lead only */}
                 {isLead && (

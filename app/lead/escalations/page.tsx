@@ -155,12 +155,7 @@ export default function EscalationsPage() {
               <span className="text-slate-700 dark:text-slate-300 font-medium">Escalation Management</span>
             </div>
           }
-          right={
-            <button onClick={() => setShowManualModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0052CC] hover:bg-[#0747A6] text-white text-xs rounded-md font-medium transition-colors">
-              <Plus className="w-3.5 h-3.5" /> Manual Escalation
-            </button>
-          }
+          right={undefined}
         />
 
         <main className="flex-1 overflow-y-auto p-5 space-y-5">
@@ -192,6 +187,9 @@ export default function EscalationsPage() {
                   <span className="text-[11px] px-2 py-0.5 bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400 rounded-full font-semibold">{issues.length}</span>
                 )}
               </div>
+              <button onClick={() => setShowManualModal(true)} className="flex items-center gap-1 px-3 py-1.5 bg-[#0052CC] text-white text-xs font-medium rounded hover:bg-[#003fa0] transition">
+                <Plus className="w-3.5 h-3.5" /> Manual Escalation
+              </button>
             </div>
 
             {loading ? (

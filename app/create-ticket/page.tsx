@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { showSuccessToast, showErrorToast } from "@/lib/toast-helpers";
-import { ChevronRight, Paperclip, Loader2, X, AlertCircle, CheckCircle, Upload } from "lucide-react";
+import { Bot, ChevronRight, Paperclip, Loader2, X, AlertCircle, CheckCircle, Upload, Sparkles } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
 import { TicketSuggestions } from "@/components/TicketSuggestions";
 import { SuggestionDrawer } from "@/components/SuggestionDrawer";
+import type { CopilotAnalysis, CopilotDiagnostic } from "@/lib/resolution-copilot";
 
 interface Attachment {
   id: string;
@@ -74,6 +75,12 @@ export default function CreateTicketPage() {
     confidence: number;
     reasoning: string;
   } | null>(null);
+  const [copilotAnalysis, setCopilotAnalysis] = useState<CopilotAnalysis | null>(null);
+  const [copilotDiagnostic, setCopilotDiagnostic] = useState<CopilotDiagnostic | null>(null);
+  const [copilotOpen, setCopilotOpen] = useState(false);
+  const [copilotLoading, setCopilotLoading] = useState(false);
+  const [copilotFinalizing, setCopilotFinalizing] = useState(false);
+  const [copilotAnswers, setCopilotAnswers] = useState<Record<string, string>>({});
 
   // Clear error whenever suggestions appear
   useEffect(() => {
@@ -149,7 +156,16 @@ export default function CreateTicketPage() {
       formData.append("description", description);
       formData.append("priority", priority);
       formData.append("category", category);
+      if (aiSuggestion?.priority) {
+        formData.append("aiPriority", aiSuggestion.priority);
+      }
+      if (aiSuggestion?.category) {
+        formData.append("aiCategory", aiSuggestion.category);
+      }
       formData.append("projectId", projectId);
+      if (copilotDiagnostic) {
+        formData.append("diagnostics", JSON.stringify(copilotDiagnostic));
+      }
 
       // Append actual File objects (not just metadata)
       attachments.forEach((attachment) => {
@@ -204,6 +220,67 @@ export default function CreateTicketPage() {
 
   const priorityLabel = PRIORITIES.find((p) => p.value === aiSuggestion?.priority)?.label ?? aiSuggestion?.priority;
   const categoryLabel = CATEGORIES.find((c) => c.value === aiSuggestion?.category)?.label ?? aiSuggestion?.category?.replace(/_/g, " ");
+
+  const runCopilotAnalysis = async () => {
+    if (!title.trim()) return showErrorToast("Add a summary first");
+    if (!description.trim() || description.trim().length < 12) {
+      return showErrorToast("Add a little more description first");
+    }
+
+    setCopilotLoading(true);
+    try {
+      const res = await fetch("/api/resolution-copilot/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          description,
+          category,
+          suggestions: allSuggestions,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Copilot analysis failed");
+      const data = (await res.json()) as CopilotAnalysis;
+      setCopilotAnalysis(data);
+      setCopilotAnswers(Object.fromEntries(data.questions.map((question) => [question, ""])));
+      setCopilotOpen(true);
+    } catch (err) {
+      console.error(err);
+      showErrorToast("Resolution Copilot could not start", "You can still create the ticket normally");
+    } finally {
+      setCopilotLoading(false);
+    }
+  };
+
+  const finalizeCopilot = async () => {
+    if (!copilotAnalysis) return;
+
+    setCopilotFinalizing(true);
+    try {
+      const res = await fetch("/api/resolution-copilot/finalize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          description,
+          analysis: copilotAnalysis,
+          answers: copilotAnswers,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Copilot finalize failed");
+      const data = (await res.json()) as CopilotDiagnostic;
+      setCopilotDiagnostic(data);
+      setCopilotOpen(false);
+      showSuccessToast("Diagnostics added", "The agent will receive this context with the ticket");
+    } catch (err) {
+      console.error(err);
+      showErrorToast("Could not save diagnostics", "You can still create the ticket normally");
+    } finally {
+      setCopilotFinalizing(false);
+    }
+  };
 
   return (
     <div className="h-screen w-screen flex overflow-hidden bg-[#F8F9FB] dark:bg-slate-950">
@@ -342,6 +419,47 @@ export default function CreateTicketPage() {
                     />
                   </div>
                 </div>
+
+                {description.trim().length >= 12 && (
+                  <div className="rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 via-white to-amber-50 p-4 shadow-sm dark:border-blue-900/60 dark:from-blue-950/30 dark:via-slate-900 dark:to-amber-950/20">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#0052CC] text-white shadow-sm">
+                        <Bot className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                              Resolution Copilot
+                            </p>
+                            <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-400">
+                              Run a short guided check before creating the issue. If it still needs support, the agent receives the diagnosis and your answers.
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            onClick={runCopilotAnalysis}
+                            disabled={copilotLoading || Boolean(copilotDiagnostic)}
+                            className="h-8 bg-[#0052CC] px-3 text-xs text-white hover:bg-[#0747A6]"
+                          >
+                            {copilotLoading ? (
+                              <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Checking...</>
+                            ) : copilotDiagnostic ? (
+                              <><CheckCircle className="mr-1.5 h-3.5 w-3.5" />Diagnostics added</>
+                            ) : (
+                              <><Sparkles className="mr-1.5 h-3.5 w-3.5" />Run guided check</>
+                            )}
+                          </Button>
+                        </div>
+                        {copilotDiagnostic && (
+                          <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300">
+                            Likely cause: <span className="font-semibold">{copilotDiagnostic.likelyCause}</span> · Confidence {copilotDiagnostic.confidence}%
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Priority + Category row with AI suggestions */}
                 <div className="grid grid-cols-2 gap-4">
@@ -497,6 +615,86 @@ export default function CreateTicketPage() {
           onClose={() => setDrawerOpen(false)}
           onSelectItem={(item) => setSelectedItem(item)}
         />
+        {copilotOpen && copilotAnalysis && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-2xl overflow-hidden rounded-lg bg-white shadow-2xl dark:bg-slate-900">
+              <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[#0052CC] dark:text-blue-400">
+                      Resolution Copilot
+                    </p>
+                    <h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">
+                      Quick diagnostic check
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCopilotOpen(false)}
+                    className="rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                    aria-label="Close Copilot"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-[70vh] space-y-5 overflow-y-auto px-5 py-5">
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/60 dark:bg-blue-950/30">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    Possible causes
+                  </p>
+                  <ol className="mt-2 space-y-1 text-sm text-slate-700 dark:text-slate-300">
+                    {copilotAnalysis.likelyCauses.map((cause, index) => (
+                      <li key={cause}>{index + 1}. {cause}</li>
+                    ))}
+                  </ol>
+                  <p className="mt-3 text-sm text-slate-700 dark:text-slate-300">
+                    Try first: <span className="font-semibold">{copilotAnalysis.suggestedAction}</span>
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  {copilotAnalysis.questions.map((question) => (
+                    <div key={question} className="space-y-1.5">
+                      <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        {question}
+                      </Label>
+                      <Input
+                        value={copilotAnswers[question] ?? ""}
+                        onChange={(e) =>
+                          setCopilotAnswers((prev) => ({ ...prev, [question]: e.target.value }))
+                        }
+                        placeholder="Your answer"
+                        className="bg-slate-50 dark:bg-slate-800"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-800 dark:bg-slate-950">
+                <button
+                  type="button"
+                  onClick={() => setCopilotOpen(false)}
+                  className="text-sm font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  Create ticket anyway
+                </button>
+                <Button
+                  type="button"
+                  onClick={finalizeCopilot}
+                  disabled={copilotFinalizing}
+                  className="bg-[#0052CC] text-white hover:bg-[#0747A6]"
+                >
+                  {copilotFinalizing ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Preparing...</>
+                  ) : (
+                    "Create ticket with diagnostics"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

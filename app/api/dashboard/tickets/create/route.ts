@@ -10,6 +10,7 @@ import { calculateSLADeadline } from "@/lib/sla";
 import { sendEmail } from "@/lib/email";
 import { ticketCreatedEmail } from "@/lib/email-templates";
 import { uploadFilesToSupabase } from "@/lib/file-upload";
+import { encodeCopilotSummary, safeParseCopilotDiagnostic } from "@/lib/resolution-copilot";
 
 interface CreateAttachmentInput {
   name: string;
@@ -32,7 +33,10 @@ export async function POST(req: NextRequest) {
     const description = formData.get("description") as string;
     const priority = formData.get("priority") as string;
     const category = formData.get("category") as string;
+    const aiPriority = formData.get("aiPriority") as string | null;
+    const aiCategory = formData.get("aiCategory") as string | null;
     const projectId = formData.get("projectId") as string;
+    const diagnostic = safeParseCopilotDiagnostic(formData.get("diagnostics"));
     const files = formData.getAll("files") as File[];
 
     if (!title || !description) {
@@ -83,6 +87,12 @@ export async function POST(req: NextRequest) {
     const issueCategory = Object.values(IssueCategory).includes(category as IssueCategory)
       ? (category as IssueCategory)
       : IssueCategory.BUG;
+    const submittedAiPriority = Object.values(IssuePriority).includes(aiPriority as IssuePriority)
+      ? (aiPriority as IssuePriority)
+      : null;
+    const submittedAiCategory = Object.values(IssueCategory).includes(aiCategory as IssueCategory)
+      ? (aiCategory as IssueCategory)
+      : null;
 
     let ticket = null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -99,6 +109,8 @@ export async function POST(req: NextRequest) {
             clientId: clientMember.clientId,
             projectId: projectId,
             ticketKey,
+            aiPriority: submittedAiPriority,
+            aiCategory: submittedAiCategory,
           },
         });
         break;
@@ -121,16 +133,23 @@ export async function POST(req: NextRequest) {
     // Await AI classification so fields are ready when user lands on the ticket page
     try {
       const result = await classifyIssue(title, description);
+      const summary = `${result.reasoning}${result.module ? ` · Module: ${result.module}` : ""}`;
       await prisma.issue.update({
         where: { id: ticket.id },
         data: {
-          aiCategory: result.category,
-          aiPriority: result.priority,
-          aiSummary: `${result.reasoning}${result.module ? ` · Module: ${result.module}` : ""}`,
+          aiCategory: submittedAiCategory ?? result.category,
+          aiPriority: submittedAiPriority ?? result.priority,
+          aiSummary: diagnostic ? encodeCopilotSummary(summary, diagnostic) : summary,
         },
       });
     } catch (e) {
       console.error("AI classify failed:", e);
+      if (diagnostic) {
+        await prisma.issue.update({
+          where: { id: ticket.id },
+          data: { aiSummary: encodeCopilotSummary(null, diagnostic) },
+        });
+      }
     }
 
     // Upload and save attachments if provided

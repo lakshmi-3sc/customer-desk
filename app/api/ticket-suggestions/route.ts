@@ -10,6 +10,7 @@ import { Prisma } from "@prisma/client";
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
+const RERANK_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5-20251001";
 
 interface Candidate {
   id: string;
@@ -309,7 +310,7 @@ Preview: ${c.content.substring(0, 100)}...`
 
   try {
     const message = await anthropic.messages.create({
-      model: "claude-3-5-sonnet-20241022",
+      model: RERANK_MODEL,
       max_tokens: 500,
       messages: [
         {

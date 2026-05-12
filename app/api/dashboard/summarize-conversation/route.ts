@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { ticketId } = await request.json();
+    const { ticketId, force } = await request.json();
     if (!ticketId) {
       return NextResponse.json({ error: "ticketId required" }, { status: 400 });
     }
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       select: { conversationSummary: true, comments: { select: { content: true, author: { select: { name: true } }, createdAt: true } } }
     });
 
-    if (existing?.conversationSummary) {
+    if (existing?.conversationSummary && !force) {
       return NextResponse.json({ summary: existing.conversationSummary, cached: true });
     }
 

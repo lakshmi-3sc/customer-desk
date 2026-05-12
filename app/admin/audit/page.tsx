@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Search, Filter, Download, Clock, User, Settings, X } from "lucide-react";
+import { ChevronRight, Search, Download, Clock, X } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
 
@@ -11,6 +11,9 @@ interface AuditEntry {
   fieldChanged: string;
   oldValue: string | null;
   newValue: string | null;
+  actionLabel?: string;
+  displayOldValue?: string | null;
+  displayNewValue?: string | null;
   changedAt: string;
   changedBy: { id: string; name: string; role: string };
   issue: { ticketKey: string | null; title: string; id: string } | null;
@@ -20,8 +23,22 @@ const ACTION_COLOR: Record<string, string> = {
   status: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
   priority: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
   assignedToId: 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300',
+  category: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300',
+  escalated: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
   title: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
 };
+
+function actionLabel(entry: AuditEntry) {
+  return entry.actionLabel ?? entry.fieldChanged.replace(/([A-Z])/g, ' $1').trim();
+}
+
+function displayOldValue(entry: AuditEntry) {
+  return entry.displayOldValue ?? entry.oldValue;
+}
+
+function displayNewValue(entry: AuditEntry) {
+  return entry.displayNewValue ?? entry.newValue;
+}
 
 function groupByDate(entries: AuditEntry[]) {
   const groups: Record<string, AuditEntry[]> = {};
@@ -48,7 +65,7 @@ export default function AuditTrailPage() {
   const [filterTo, setFilterTo] = useState('');
   const [filterAction, setFilterAction] = useState('');
 
-  const fetchAudit = async () => {
+  const fetchAudit = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -57,14 +74,16 @@ export default function AuditTrailPage() {
       const res = await fetch(`/api/admin/audit?${params.toString()}`);
       if (res.ok) setAudit((await res.json()).audit ?? []);
     } catch {} finally { setLoading(false); }
-  };
+  }, [filterFrom, filterTo]);
 
-  useEffect(() => { fetchAudit(); }, [filterFrom, filterTo]);
+  useEffect(() => { fetchAudit(); }, [fetchAudit]);
 
   const filtered = audit.filter((e) => {
     const matchQ = !search || e.changedBy.name.toLowerCase().includes(search.toLowerCase()) ||
       (e.issue?.ticketKey ?? '').toLowerCase().includes(search.toLowerCase()) ||
-      e.fieldChanged.toLowerCase().includes(search.toLowerCase());
+      e.fieldChanged.toLowerCase().includes(search.toLowerCase()) ||
+      actionLabel(e).toLowerCase().includes(search.toLowerCase()) ||
+      (displayNewValue(e) ?? '').toLowerCase().includes(search.toLowerCase());
     const matchAction = !filterAction || e.fieldChanged === filterAction;
     return matchQ && matchAction;
   });
@@ -76,9 +95,9 @@ export default function AuditTrailPage() {
       ...filtered.map((e) => [
         new Date(e.changedAt).toLocaleString('en-GB'),
         e.changedBy.name,
-        e.fieldChanged,
-        e.oldValue ?? '',
-        e.newValue ?? '',
+        actionLabel(e),
+        displayOldValue(e) ?? '',
+        displayNewValue(e) ?? '',
         e.issue?.ticketKey ?? e.issue?.id ?? '',
       ])];
     const csv = rows.map((r) => r.join(',')).join('\n');
@@ -165,14 +184,21 @@ export default function AuditTrailPage() {
                             <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{entry.changedBy.name}</span>
                             <span className="text-xs text-slate-400 capitalize">{entry.changedBy.role.replace(/_/g, ' ').toLowerCase()}</span>
                             <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase ${ACTION_COLOR[entry.fieldChanged] ?? 'bg-slate-100 text-slate-600 dark:bg-slate-800'}`}>
-                              {entry.fieldChanged.replace(/([A-Z])/g, ' $1').trim()}
+                              {actionLabel(entry)}
                             </span>
                           </div>
                           <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-                            {entry.oldValue && (
-                              <><span className="line-through text-slate-400">{entry.oldValue}</span><span>?</span></>
+                            {displayOldValue(entry) && (
+                              <span className="line-through text-slate-400">{displayOldValue(entry)}</span>
                             )}
-                            {entry.newValue && <span className="font-medium text-slate-700 dark:text-slate-300">{entry.newValue}</span>}
+                            {displayOldValue(entry) && displayNewValue(entry) && (
+                              <span className="text-slate-400">to</span>
+                            )}
+                            {displayNewValue(entry) && (
+                              <span className="font-medium text-slate-700 dark:text-slate-300">
+                                {entry.fieldChanged === 'assignedToId' ? `Assigned to ${displayNewValue(entry)}` : displayNewValue(entry)}
+                              </span>
+                            )}
                             {entry.issue && (
                               <button onClick={() => router.push(`/tickets/${entry.issue!.ticketKey ?? entry.issue!.id}`)}
                                 className="ml-1 font-mono text-[#0052CC] dark:text-blue-400 hover:underline">

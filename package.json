@@ -7,6 +7,9 @@
     "build": "prisma generate && next build",
     "start": "NODE_ENV=production tsx server.ts",
     "lint": "eslint",
+    "seed": "tsx prisma/seed.ts",
+    "seed:escalations": "tsx prisma/seed-escalations.ts",
+    "seed:similar": "tsx scripts/seed-similar-tickets.ts",
     "seed:demo": "tsx scripts/seed-demo-tickets.ts",
     "db:backup": "tsx scripts/backup-db.ts",
     "db:restore": "tsx scripts/restore-db.ts"

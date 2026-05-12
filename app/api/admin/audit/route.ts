@@ -29,5 +29,46 @@ export async function GET(request: Request) {
     take: 200,
   });
 
-  return NextResponse.json({ audit: history });
+  const assignedUserIds = Array.from(new Set(
+    history
+      .filter((entry) => entry.fieldChanged === 'assignedToId')
+      .flatMap((entry) => [entry.oldValue, entry.newValue])
+      .filter((value): value is string => Boolean(value))
+  ));
+
+  const assignedUsers = assignedUserIds.length > 0
+    ? await prisma.user.findMany({
+        where: { id: { in: assignedUserIds } },
+        select: { id: true, name: true },
+      })
+    : [];
+
+  const userNameById = new Map(assignedUsers.map((user) => [user.id, user.name]));
+
+  const actionLabels: Record<string, string> = {
+    status: 'Status changed',
+    priority: 'Priority changed',
+    category: 'Category changed',
+    assignedToId: 'Assigned',
+    title: 'Title edited',
+    escalated: 'Escalated',
+  };
+
+  const displayValue = (entry: (typeof history)[number], value: string | null) => {
+    if (!value) return null;
+    if (entry.fieldChanged === 'assignedToId') return userNameById.get(value) ?? 'Unknown user';
+    if (entry.fieldChanged === 'escalated' && (value === 'true' || value === 'false')) return null;
+    return value;
+  };
+
+  // Map createdAt to changedAt for frontend compatibility
+  const audit = history.map((entry) => ({
+    ...entry,
+    changedAt: entry.createdAt,
+    actionLabel: actionLabels[entry.fieldChanged] ?? entry.fieldChanged.replace(/([A-Z])/g, ' $1').trim(),
+    displayOldValue: displayValue(entry, entry.oldValue),
+    displayNewValue: displayValue(entry, entry.newValue),
+  }));
+
+  return NextResponse.json({ audit });
 }

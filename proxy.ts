@@ -8,7 +8,7 @@ const ALL_APP_ROLES = [...THREESC_ROLES, ...CLIENT_ROLES] as const;
 
 type AppRole = (typeof ALL_APP_ROLES)[number];
 
-const PUBLIC_PATHS = ["/login", "/unauthorised", "/api/auth"];
+const PUBLIC_PATHS = ["/login", "/unauthorised", "/api/auth", "/api/cron"];
 
 function pathMatches(pathname: string, path: string) {
   return pathname === path || pathname.startsWith(`${path}/`);
