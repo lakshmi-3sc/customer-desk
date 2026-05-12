@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { resolveTicketId } from "@/lib/resolve-ticket";
-import { notFound } from "next/navigation";
+import { forbidden, notFound } from "next/navigation";
 import TicketDetail from "./TicketDetail";
 
 type Jsonified<T> =
@@ -53,6 +53,18 @@ export default async function TicketDetailPage({
   ]);
 
   if (!ticket) notFound();
+
+  if (isClient) {
+    const membership = await prisma.clientMember.findFirst({
+      where: {
+        userId: session.user.id,
+        clientId: ticket.client.id,
+      },
+      select: { id: true },
+    });
+
+    if (!membership) forbidden();
+  }
 
   // Build comment tree (top-level + nested replies)
   type C = (typeof allComments)[0] & { replies: C[] };

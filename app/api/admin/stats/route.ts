@@ -34,6 +34,10 @@ export async function GET(request: Request) {
     unrespondedOver24hRaw,
     frtCurrentRaw,
     frtPrevRaw,
+    historyEntries,
+    recentEscalations,
+    recentSlaBreaches,
+    aiComments,
   ] = await Promise.all([
     prisma.$queryRaw<Array<{
       totalIssues: bigint;
@@ -201,6 +205,57 @@ export async function GET(request: Request) {
       WHERE i.status IN ('RESOLVED', 'CLOSED')
       AND i."createdAt" >= ${prevRangeStart} AND i."createdAt" < ${rangeStart} ${clientSql}
     `,
+    prisma.issueHistory.findMany({
+      where: {
+        fieldChanged: { in: ['assignedToId', 'status', 'priority'] },
+        createdAt: { gte: new Date(now.getTime() - 7 * 86400000) },
+        ...(clientId ? { issue: { clientId } } : {}),
+      },
+      include: {
+        changedBy: { select: { name: true } },
+        issue: {
+          select: {
+            id: true, title: true, ticketKey: true, priority: true,
+            client: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 40,
+    }),
+    prisma.issue.findMany({
+      where: { escalated: true, escalatedAt: { gte: new Date(now.getTime() - 7 * 86400000) }, ...clientWhere },
+      select: {
+        id: true, title: true, ticketKey: true, priority: true, escalatedAt: true,
+        client: { select: { name: true } },
+      },
+      orderBy: { escalatedAt: 'desc' },
+      take: 15,
+    }),
+    prisma.issue.findMany({
+      where: { slaBreached: true, updatedAt: { gte: new Date(now.getTime() - 7 * 86400000) }, ...clientWhere },
+      select: {
+        id: true, title: true, ticketKey: true, priority: true, updatedAt: true,
+        client: { select: { name: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 15,
+    }),
+    prisma.comment.findMany({
+      where: {
+        isAiSuggested: true,
+        createdAt: { gte: new Date(now.getTime() - 7 * 86400000) },
+        ...(clientId ? { issue: { clientId } } : {}),
+      },
+      select: {
+        id: true, createdAt: true,
+        issue: {
+          select: { id: true, title: true, ticketKey: true, client: { select: { name: true } } },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 15,
+    }),
   ]);
 
   const issueSummary = issueSummaryRaw[0];
@@ -401,6 +456,103 @@ export async function GET(request: Request) {
     });
   }
 
+  type FeedEntry = {
+    id: string;
+    type: 'escalated' | 'sla_breached' | 'assigned' | 'resolved' | 'status_changed' | 'ai_routed' | 'priority_changed';
+    message: string;
+    sub: string;
+    ticketKey: string | null;
+    issueId: string;
+    time: string;
+    priority?: string;
+  };
+
+  const feed: FeedEntry[] = [];
+
+  for (const esc of recentEscalations) {
+    feed.push({
+      id: `esc-${esc.id}`,
+      type: 'escalated',
+      message: 'Ticket escalated',
+      sub: `${esc.ticketKey ?? esc.id.slice(0, 8)} · ${esc.client.name}`,
+      ticketKey: esc.ticketKey,
+      issueId: esc.id,
+      time: (esc.escalatedAt ?? new Date()).toISOString(),
+      priority: esc.priority,
+    });
+  }
+
+  for (const issue of recentSlaBreaches) {
+    feed.push({
+      id: `sla-${issue.id}`,
+      type: 'sla_breached',
+      message: 'SLA breached',
+      sub: `${issue.ticketKey ?? issue.id.slice(0, 8)} · ${issue.client.name}`,
+      ticketKey: issue.ticketKey,
+      issueId: issue.id,
+      time: issue.updatedAt.toISOString(),
+      priority: issue.priority,
+    });
+  }
+
+  for (const comment of aiComments) {
+    feed.push({
+      id: `ai-${comment.id}`,
+      type: 'ai_routed',
+      message: 'AI suggested response',
+      sub: `${comment.issue.ticketKey ?? comment.issue.id.slice(0, 8)} · ${comment.issue.client.name}`,
+      ticketKey: comment.issue.ticketKey,
+      issueId: comment.issue.id,
+      time: comment.createdAt.toISOString(),
+    });
+  }
+
+  for (const h of historyEntries) {
+    if (h.fieldChanged === 'assignedToId' && h.newValue) {
+      feed.push({
+        id: `hist-${h.id}`,
+        type: 'assigned',
+        message: `${h.changedBy.name} assigned issue`,
+        sub: `${h.issue.ticketKey ?? h.issue.id.slice(0, 8)} · ${h.issue.client.name}`,
+        ticketKey: h.issue.ticketKey,
+        issueId: h.issue.id,
+        time: h.createdAt.toISOString(),
+        priority: h.issue.priority,
+      });
+    } else if (h.fieldChanged === 'status' && h.newValue === 'RESOLVED') {
+      feed.push({
+        id: `hist-${h.id}`,
+        type: 'resolved',
+        message: `${h.changedBy.name} resolved ticket`,
+        sub: `${h.issue.ticketKey ?? h.issue.id.slice(0, 8)} · ${h.issue.client.name}`,
+        ticketKey: h.issue.ticketKey,
+        issueId: h.issue.id,
+        time: h.createdAt.toISOString(),
+      });
+    } else if (h.fieldChanged === 'priority' && h.newValue === 'CRITICAL') {
+      feed.push({
+        id: `hist-${h.id}`,
+        type: 'priority_changed',
+        message: 'Priority escalated to Critical',
+        sub: `${h.issue.ticketKey ?? h.issue.id.slice(0, 8)} · ${h.issue.client.name}`,
+        ticketKey: h.issue.ticketKey,
+        issueId: h.issue.id,
+        time: h.createdAt.toISOString(),
+      });
+    }
+  }
+
+  const seenFeedItems = new Set<string>();
+  const dedupedFeed = feed
+    .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+    .filter((entry) => {
+      const key = `${entry.type}-${entry.issueId}`;
+      if (seenFeedItems.has(key)) return false;
+      seenFeedItems.add(key);
+      return true;
+    })
+    .slice(0, 30);
+
   return NextResponse.json({
     kpis: {
       totalCustomers: clientsRaw.length,
@@ -432,5 +584,6 @@ export async function GET(request: Request) {
     aiInsights: aiInsights.slice(0, 4),
     volumeByDay,
     customerHealth,
+    feed: dedupedFeed,
   });
 }

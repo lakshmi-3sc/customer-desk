@@ -94,50 +94,25 @@ export default function ClientDashboard() {
   const [reportsData, setReportsData] = useState<any>(null);
   const [activity, setActivity] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+
   const fetchAll = async () => {
-    await Promise.all([fetchKPI(), fetchTickets(), fetchReports(), fetchActivity(), fetchUsers()]);
-  };
-
-  const fetchKPI = async () => {
     try {
-      const res = await fetch("/api/dashboard/kpi");
-      if (res.ok) { const d = await res.json(); setKpiData(d.metrics); }
-    } catch {}
-    finally { setKpiLoading(false); }
-  };
-
-  const fetchTickets = async () => {
-    try {
-      const res = await fetch("/api/dashboard/tickets", { cache: "no-store" });
+      const res = await fetch("/api/dashboard/client-summary", { cache: "no-store" });
       if (res.ok) {
         const d = await res.json();
+        setKpiData(d.metrics);
         setTickets((d.tickets ?? []).sort((a: any, b: any) =>
           new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
         ).slice(0, 8));
+        setReportsData(d.reports);
+        setActivity(d.activity ?? []);
+        setUsers(Array.isArray(d.users) ? d.users : []);
       }
     } catch {}
-    finally { setTicketsLoading(false); }
-  };
-
-  const fetchReports = async () => {
-    try {
-      const res = await fetch("/api/dashboard/reports");
-      if (res.ok) setReportsData(await res.json());
-    } catch {}
-  };
-
-  const fetchActivity = async () => {
-    try {
-      const res = await fetch("/api/dashboard/activity");
-      if (res.ok) { const d = await res.json(); setActivity(d.activity ?? []); }
-    } catch {}
-  };
-
-  const fetchUsers = async () => {
-    try {
-      const res = await fetch("/api/dashboard/users");
-      if (res.ok) { const d = await res.json(); setUsers(Array.isArray(d) ? d : []); }
-    } catch {}
+    finally {
+      setKpiLoading(false);
+      setTicketsLoading(false);
+    }
   };
 
   useEffect(() => { fetchAll(); }, []);

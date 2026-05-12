@@ -10,9 +10,14 @@ export async function GET() {
   }
 
   const clients = await prisma.client.findMany({
-    include: {
+    select: {
+      id: true,
+      name: true,
+      industry: true,
+      isActive: true,
+      updatedAt: true,
       members: { include: { user: { select: { id: true, name: true, email: true, role: true, isActive: true } } } },
-      issues: { select: { status: true, slaBreached: true, createdAt: true } },
+      issues: { select: { status: true, slaBreached: true } },
       projects: { select: { id: true, name: true, status: true } },
     },
     orderBy: { name: 'asc' },

@@ -19,23 +19,30 @@ const TYPE_META: Record<string, { icon: React.ElementType; color: string; bg: st
   ISSUE_RESOLVED: { icon: Info, color: "text-green-600 dark:text-green-400", bg: "bg-green-100 dark:bg-green-950" },
 };
 
+interface NotificationItem {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  issueId?: string | null;
+  issueKey?: string | null;
+  createdAt: string;
+}
+
 export function NotificationBell() {
   const router = useRouter();
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
-  const [mounted, setMounted] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const hasFetchedRef = useRef(false);
   const [panelPosition, setPanelPosition] = useState({ top: 0, right: 0 });
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const fetchNotifications = async () => {
     try {
+      hasFetchedRef.current = true;
       const res = await fetch("/api/notifications");
       if (res.ok) {
         const data = await res.json();
@@ -43,7 +50,7 @@ export function NotificationBell() {
         const ids = new Set<string>(
           JSON.parse(typeof window !== "undefined" ? (localStorage.getItem("notif-read") ?? "[]") : "[]")
         );
-        const newCount = (data.notifications ?? []).filter((n: any) => !ids.has(n.id)).length;
+        const newCount = ((data.notifications ?? []) as NotificationItem[]).filter((n) => !ids.has(n.id)).length;
         setUnreadCount(Math.min(newCount, 9));
         setReadIds(ids);
       }
@@ -53,9 +60,12 @@ export function NotificationBell() {
   };
 
   useEffect(() => {
-    fetchNotifications();
+    const timeout = setTimeout(fetchNotifications, 3000);
     const interval = setInterval(fetchNotifications, 60000);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
   }, []);
 
   // Close when clicking outside
@@ -83,6 +93,9 @@ export function NotificationBell() {
         top: rect.bottom + 8,
         right: window.innerWidth - rect.right,
       });
+      if (!hasFetchedRef.current) {
+        void fetchNotifications();
+      }
     }
     setOpen(!open);
   };
@@ -103,7 +116,7 @@ export function NotificationBell() {
         )}
       </button>
 
-      {open && mounted && (
+      {open && typeof document !== "undefined" && (
         createPortal(
         <div className="fixed w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-[99999] overflow-hidden" style={{top: `${panelPosition.top}px`, right: `${panelPosition.right}px`}}>
           {/* Header */}

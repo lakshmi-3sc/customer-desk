@@ -48,6 +48,7 @@ interface Stats {
     id: string; name: string; isActive: boolean; lastActive: string;
     userCount: number; openIssues: number; slaBreaches: number; totalIssues: number; csat: number;
   }[];
+  feed: FeedEntry[];
 }
 
 interface FeedEntry {
@@ -125,17 +126,6 @@ export default function AdminDashboard() {
   const [feed, setFeed] = useState<FeedEntry[]>([]);
   const [feedLoading, setFeedLoading] = useState(true);
 
-  const fetchActivity = async (cId?: string) => {
-    const useClient = cId !== undefined ? cId : customerFilter;
-    const params = new URLSearchParams();
-    if (useClient) params.set('clientId', useClient);
-    try {
-      const res = await fetch('/api/admin/activity?' + params.toString());
-      if (res.ok) { const data = await res.json(); setFeed(data.feed ?? []); }
-    } catch {}
-    finally { setFeedLoading(false); }
-  };
-
   const fetchStats = async (d?: number, cId?: string) => {
     const useDays = d ?? days;
     const useClient = cId !== undefined ? cId : customerFilter;
@@ -143,13 +133,17 @@ export default function AdminDashboard() {
     if (useClient) params.set('clientId', useClient);
     try {
       const res = await fetch('/api/admin/stats?' + params.toString());
-      if (res.ok) setStats(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data);
+        setFeed(data.feed ?? []);
+      }
       else console.error('Admin stats API error:', res.status, await res.text());
     } catch (e) { console.error('Admin stats fetch failed:', e); }
-    finally { setLoading(false); }
+    finally { setLoading(false); setFeedLoading(false); }
   };
 
-  useEffect(() => { fetchStats(); fetchActivity(); }, []);
+  useEffect(() => { fetchStats(); }, []);
 
   const handleDaysChange = (d: number) => {
     setDays(d); setLoading(true); fetchStats(d);
@@ -157,7 +151,7 @@ export default function AdminDashboard() {
 
   const handleCustomerChange = (cId: string) => {
     setCustomerFilter(cId); setLoading(true); setFeedLoading(true);
-    fetchStats(undefined, cId); fetchActivity(cId);
+    fetchStats(undefined, cId);
   };
 
   const chartData = stats?.volumeByDay ?? [];

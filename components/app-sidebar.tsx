@@ -45,6 +45,7 @@ function NavItem({ href, icon, label, active, indent, badge, collapsed }: NavIte
   return (
     <Link
       href={href}
+      prefetch={false}
       title={collapsed ? label : ""}
       className={cn(
         "relative group flex items-center gap-2.5 rounded-md font-medium transition-all duration-150",
@@ -179,6 +180,7 @@ export function AppSidebar() {
         <div className="px-3 pt-3 pb-2 flex-shrink-0">
           <Link
             href="/create-ticket"
+            prefetch={false}
             className={cn(
               "flex items-center justify-center gap-1.5 w-full py-1.5 px-4 rounded-md text-[13px] font-semibold text-white transition-all shadow-sm",
               "bg-white/15 hover:bg-white/20 border border-white/20"
@@ -194,6 +196,7 @@ export function AppSidebar() {
         <div className="px-2 pt-3 pb-2 flex-shrink-0">
           <Link
             href="/create-ticket"
+            prefetch={false}
             title="Create Ticket"
             className="flex items-center justify-center w-full py-2.5 rounded-md text-white transition-colors bg-white/15 hover:bg-white/20 border border-white/20"
           >
