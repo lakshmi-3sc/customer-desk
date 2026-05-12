@@ -51,6 +51,37 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 const CATEGORY_COLORS = ["#0052CC", "#10B981", "#F59E0B", "#8B5CF6", "#EF4444"];
 
+const formatLabel = (value?: string | null) => {
+  if (!value) return "";
+  return value.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+type ActivityItem = {
+  fieldChanged?: string;
+  actionLabel?: string;
+  newValue?: string | null;
+  displayNewValue?: string | null;
+};
+
+const getActivityText = (item: ActivityItem) => {
+  const action = item.actionLabel ?? item.fieldChanged?.replace(/([A-Z])/g, " $1").trim() ?? "updated ticket";
+  const value = item.displayNewValue ?? item.newValue;
+
+  if (item.fieldChanged === "assignedToId") {
+    return value ? `${action} to ${value}` : "unassigned ticket";
+  }
+
+  if (item.fieldChanged === "status" || item.fieldChanged === "priority" || item.fieldChanged === "category") {
+    return value ? `${action} to ${formatLabel(value)}` : action;
+  }
+
+  if (item.fieldChanged === "escalated") {
+    return value ?? action;
+  }
+
+  return value ? `${action}: ${value}` : action;
+};
+
 /* ── main component ──────────────────────────────────── */
 export default function ClientDashboard() {
   const { data: session } = useSession();
@@ -263,12 +294,12 @@ export default function ClientDashboard() {
             </div>
           )}
 
-          {/* Row 1 — Open Issues (2/3) | Top Active Users (1/3) */}
+          {/* Row 1 — Active Issues (2/3) | Top Active Users (1/3) */}
           <div className="grid grid-cols-3 gap-5">
-            {/* Open Issues Table */}
+            {/* Active Issues Table */}
             <div className="col-span-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
               <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Open Issues</h2>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Active Issues</h2>
                 <button onClick={() => router.push("/tickets")}
                   className="flex items-center gap-1 text-xs text-[#0052CC] hover:underline">
                   View all <ArrowUpRight className="w-3 h-3" />
@@ -281,7 +312,7 @@ export default function ClientDashboard() {
               ) : tickets.filter((t: any) => t.status === "OPEN" || t.status === "IN_PROGRESS").length === 0 ? (
                 <div className="p-10 text-center">
                   <CheckCircle className="w-8 h-8 mx-auto mb-3 text-emerald-400 opacity-50" />
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">No open tickets — great!</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">No active tickets — great!</p>
                   <button onClick={() => router.push("/create-ticket")}
                     className="flex items-center gap-1.5 px-3 py-2 text-xs bg-[#0052CC] hover:bg-[#0747A6] text-white rounded-lg mx-auto font-medium">
                     <Plus className="w-3.5 h-3.5" /> Create a ticket
@@ -445,8 +476,7 @@ export default function ClientDashboard() {
                         <div className="flex-1 min-w-0">
                           <p className="text-[11px] text-slate-700 dark:text-slate-300 leading-snug">
                             <span className="font-semibold">{item.changedBy?.name ?? "System"}</span>
-                            {" changed "}<span className="font-medium">{item.fieldChanged}</span>
-                            {item.newValue && <span className="text-slate-500"> → <span className="text-[#0052CC] dark:text-blue-400 font-medium">{item.newValue}</span></span>}
+                            <span className="text-slate-500"> {getActivityText(item)}</span>
                           </p>
                           {item.issue && (
                             <p className="text-[10px] text-slate-400 mt-0.5 font-mono truncate">

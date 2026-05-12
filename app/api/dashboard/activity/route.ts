@@ -53,7 +53,46 @@ export async function GET(request: Request) {
       },
     });
 
-    return NextResponse.json({ activity: history });
+    const assignedUserIds = Array.from(new Set(
+      history
+        .filter((entry) => entry.fieldChanged === "assignedToId")
+        .flatMap((entry) => [entry.oldValue, entry.newValue])
+        .filter((value): value is string => Boolean(value))
+    ));
+
+    const assignedUsers = assignedUserIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: assignedUserIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+
+    const userNameById = new Map(assignedUsers.map((user) => [user.id, user.name]));
+
+    const actionLabels: Record<string, string> = {
+      status: "updated status",
+      priority: "updated priority",
+      category: "updated category",
+      assignedToId: "assigned ticket",
+      escalated: "updated escalation",
+      title: "updated title",
+    };
+
+    const displayValue = (entry: (typeof history)[number], value: string | null) => {
+      if (!value) return null;
+      if (entry.fieldChanged === "assignedToId") return userNameById.get(value) ?? "Unknown user";
+      if (entry.fieldChanged === "escalated" && (value === "true" || value === "false")) return null;
+      return value;
+    };
+
+    const activity = history.map((entry) => ({
+      ...entry,
+      actionLabel: actionLabels[entry.fieldChanged] ?? entry.fieldChanged.replace(/([A-Z])/g, " $1").trim(),
+      displayOldValue: displayValue(entry, entry.oldValue),
+      displayNewValue: displayValue(entry, entry.newValue),
+    }));
+
+    return NextResponse.json({ activity });
   } catch (error) {
     console.error("Activity API error:", error);
     return NextResponse.json({ error: "Failed to fetch activity" }, { status: 500 });

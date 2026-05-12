@@ -50,6 +50,9 @@ interface TicketHistoryEntry {
   fieldChanged: string;
   oldValue: string | null;
   newValue: string | null;
+  actionLabel?: string;
+  displayOldValue?: string | null;
+  displayNewValue?: string | null;
   createdAt: string;
   changedBy?: {
     name: string;
@@ -204,6 +207,35 @@ function StatusLozenge({ status }: { status: string }) {
     </span>
   );
 }
+
+const formatHistoryValue = (value?: string | null) => {
+  if (!value) return "";
+  return value.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+const getHistoryText = (entry: TicketHistoryEntry) => {
+  const action = entry.actionLabel ?? entry.fieldChanged.replace(/([A-Z])/g, " $1").trim();
+  const oldValue = entry.displayOldValue ?? entry.oldValue;
+  const newValue = entry.displayNewValue ?? entry.newValue;
+
+  if (entry.fieldChanged === "assignedToId") {
+    return newValue ? `${action} to ${newValue}` : "unassigned ticket";
+  }
+
+  if (entry.fieldChanged === "status" || entry.fieldChanged === "priority" || entry.fieldChanged === "category") {
+    return newValue ? `${action} to ${formatHistoryValue(newValue)}` : action;
+  }
+
+  if (entry.fieldChanged === "escalated") {
+    return newValue ?? action;
+  }
+
+  if (oldValue && newValue) {
+    return `${action} from ${formatHistoryValue(oldValue)} to ${formatHistoryValue(newValue)}`;
+  }
+
+  return newValue ? `${action}: ${newValue}` : action;
+};
 
 function PriorityBadge({ priority }: { priority: string }) {
   const map: Record<string, { cls: string; dot: string }> = {
@@ -1001,12 +1033,12 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                           <button
                             onClick={loadConversationSummary}
                             disabled={summaryLoading || (conversationSummary !== null && !summaryStale)}
-                            className="flex items-center gap-1.5 rounded-md border border-purple-200 bg-purple-50 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-purple-800 dark:bg-purple-950/40 dark:hover:bg-purple-900/50"
+                            className="flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-900/60 dark:bg-blue-950/30 dark:hover:bg-blue-950/50"
                           >
                           {summaryLoading ? (
                             <>
-                              <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-600 dark:text-purple-400" />
-                              <span className="text-purple-700 dark:text-purple-400">Generating...</span>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600 dark:text-blue-400" />
+                              <span className="text-[#0052CC] dark:text-blue-300">Generating...</span>
                             </>
                           ) : conversationSummary && !summaryStale ? (
                             <>
@@ -1020,8 +1052,8 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                             </>
                           ) : (
                             <>
-                              <Sparkles className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
-                              <span className="text-purple-700 dark:text-purple-400">Summarize</span>
+                              <Sparkles className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                              <span className="text-[#0052CC] dark:text-blue-300">Summarize</span>
                             </>
                           )}
                           </button>
@@ -1029,7 +1061,7 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                       )}
 
                       {conversationSummary && (
-                        <div className="rounded-lg border border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50 p-4 shadow-sm dark:border-purple-800 dark:from-purple-950/30 dark:to-blue-950/20">
+                        <div className="rounded-lg border border-blue-200 bg-gradient-to-br from-blue-50 to-blue-50/50 p-4 shadow-sm dark:border-blue-900/60 dark:from-blue-950/20 dark:to-blue-950/10">
                           <div className="min-w-0">
                               <div className="mb-3 flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-2">
@@ -1298,16 +1330,7 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                             <div className="flex-1 min-w-0">
                               <p className="text-sm text-slate-700 dark:text-slate-300">
                                 <span className="font-medium">{entry.changedBy?.name ?? 'System'}</span>
-                                {' changed '}
-                                <span className="font-medium">{entry.fieldChanged}</span>
-                                {entry.oldValue && entry.newValue && (
-                                  <span className="text-slate-500">
-                                    {' from '}
-                                    <span className="line-through text-xs">{entry.oldValue}</span>
-                                    {' to '}
-                                    <span className="font-semibold text-[#0052CC] dark:text-blue-400">{entry.newValue}</span>
-                                  </span>
-                                )}
+                                <span className="text-slate-500"> {getHistoryText(entry)}</span>
                               </p>
                               <p className="text-xs text-slate-400 mt-0.5">
                                 {new Date(entry.createdAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
