@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { IssueCategory, IssuePriority, IssueStatus, Prisma } from "@prisma/client";
 
 export const revalidate = 0; // No caching - always fresh
 
@@ -14,6 +15,11 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const status = searchParams.get("status");
+    const pageParam = searchParams.get("page");
+    const pageSizeParam = searchParams.get("pageSize");
+    const isPaginated = Boolean(pageParam || pageSizeParam);
+    const page = Math.max(1, Number.parseInt(pageParam ?? "1", 10) || 1);
+    const pageSize = Math.min(100, Math.max(10, Number.parseInt(pageSizeParam ?? "25", 10) || 25));
 
     const currentUser = await prisma.user.findUnique({
       where: { email: session.user.email },
@@ -23,12 +29,12 @@ export async function GET(request: NextRequest) {
     }
 
     const role = currentUser.role;
-    const is3SC = ["THREESC_ADMIN", "THREESC_LEAD", "THREESC_AGENT"].includes(role);
+    const where: Prisma.IssueWhereInput = {};
 
-    let where: any = {};
-
-    if (status) {
-      where.status = status.toUpperCase();
+    const validStatuses = ["OPEN", "ACKNOWLEDGED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+    const requestedStatus = status?.toUpperCase();
+    if (requestedStatus && validStatuses.includes(requestedStatus)) {
+      where.status = requestedStatus as IssueStatus;
     }
 
     if (role === "CLIENT_USER") {
@@ -44,37 +50,108 @@ export async function GET(request: NextRequest) {
     }
     // THREESC_LEAD and THREESC_ADMIN see all tickets
 
-    const rawTickets = await prisma.issue.findMany({
-      where,
-      orderBy: { updatedAt: "desc" },
-      select: {
-        id: true,
-        ticketKey: true,
-        title: true,
-        description: true,
-        status: true,
-        priority: true,
-        category: true,
-        slaBreached: true,
-        slaBreachRisk: true,
-        slaDueAt: true,
-        createdAt: true,
-        updatedAt: true,
-        project: { select: { id: true, name: true } },
-        raisedBy: { select: { id: true, name: true } },
-        assignedTo: { select: { id: true, name: true } },
-        client: { select: { id: true, name: true } },
-        _count: { select: { comments: { where: { isInternal: false } } } },
-      },
-      take: 200,
-    });
+    const priority = searchParams.get("priority");
+    const category = searchParams.get("category");
+    const clientId = searchParams.get("clientId");
+    const projectId = searchParams.get("projectId");
+    const assignedToId = searchParams.get("assignedToId");
+    const dateFrom = searchParams.get("dateFrom");
+    const dateTo = searchParams.get("dateTo");
+    const search = searchParams.get("search")?.trim();
+
+    const validPriorities = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+    const validCategories = ["BUG", "FEATURE_REQUEST", "DATA_ACCURACY", "PERFORMANCE", "ACCESS_SECURITY"];
+
+    if (priority && validPriorities.includes(priority)) {
+      where.priority = priority as IssuePriority;
+    }
+    if (category && validCategories.includes(category)) {
+      where.category = category as IssueCategory;
+    }
+    if (projectId) {
+      where.projectId = projectId;
+    }
+    if (clientId && ["THREESC_ADMIN", "THREESC_LEAD", "THREESC_AGENT"].includes(role)) {
+      where.clientId = clientId;
+    }
+    if (assignedToId && ["THREESC_ADMIN", "THREESC_LEAD"].includes(role)) {
+      where.assignedToId = assignedToId;
+    }
+    if (searchParams.get("unassigned") === "true" && ["THREESC_ADMIN", "THREESC_LEAD"].includes(role)) {
+      where.assignedToId = null;
+    }
+    if (searchParams.get("slaAtRisk") === "true") {
+      where.slaBreachRisk = true;
+    }
+    if (searchParams.get("slaBreached") === "true") {
+      where.slaBreached = true;
+    }
+    if (searchParams.get("unresponded") === "true") {
+      where.comments = { none: { isInternal: false } };
+    }
+    if (dateFrom || dateTo) {
+      where.createdAt = {
+        ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+        ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999`) } : {}),
+      };
+    }
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+        { ticketKey: { contains: search, mode: "insensitive" } },
+      ];
+    }
+
+    const ticketSelect = {
+      id: true,
+      ticketKey: true,
+      title: true,
+      description: true,
+      status: true,
+      priority: true,
+      category: true,
+      slaBreached: true,
+      slaBreachRisk: true,
+      slaDueAt: true,
+      createdAt: true,
+      updatedAt: true,
+      project: { select: { id: true, name: true } },
+      raisedBy: { select: { id: true, name: true } },
+      assignedTo: { select: { id: true, name: true } },
+      client: { select: { id: true, name: true } },
+      _count: { select: { comments: { where: { isInternal: false } } } },
+    } satisfies Prisma.IssueSelect;
+
+    const [rawTickets, total] = await Promise.all([
+      prisma.issue.findMany({
+        where,
+        orderBy: { updatedAt: "desc" },
+        select: ticketSelect,
+        skip: isPaginated ? (page - 1) * pageSize : 0,
+        take: isPaginated ? pageSize : 200,
+      }),
+      isPaginated ? prisma.issue.count({ where }) : Promise.resolve(undefined),
+    ]);
 
     const tickets = rawTickets.map(({ _count, ...t }) => ({
       ...t,
       hasResponse: _count.comments > 0,
     }));
 
-    const response = NextResponse.json({ tickets });
+    const response = NextResponse.json({
+      tickets,
+      ...(isPaginated && total !== undefined
+        ? {
+            pagination: {
+              page,
+              pageSize,
+              total,
+              totalPages: Math.max(1, Math.ceil(total / pageSize)),
+            },
+          }
+        : {}),
+    });
     // Disable caching to ensure real-time updates
     response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
     response.headers.set("Pragma", "no-cache");

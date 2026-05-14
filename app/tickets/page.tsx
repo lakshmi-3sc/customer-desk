@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, ChevronRight, Plus, Search, X, Download, ShieldAlert, Clock } from 'lucide-react';
+import { CheckCircle, ChevronRight, Plus, Search, X, Download, ShieldAlert, Clock, SlidersHorizontal } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { AppSidebar } from '@/components/app-sidebar';
@@ -45,6 +45,13 @@ interface DashboardUserOption {
   id: string;
   name: string;
   role: string;
+}
+
+interface PaginationState {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
 }
 
 const generateTicketKey = (project: { name: string } | null, ticketId: string): string => {
@@ -126,6 +133,15 @@ function TicketsContent() {
   const [filterSlaAtRisk, setFilterSlaAtRisk] = useState(false);
   const [filterSlaBreached, setFilterSlaBreached] = useState(false);
   const [filterUnresponded, setFilterUnresponded] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [pagination, setPagination] = useState<PaginationState>({
+    page: 1,
+    pageSize: 25,
+    total: 0,
+    totalPages: 1,
+  });
 
   const isClientUser = session?.user?.role === 'CLIENT_USER';
   const isLead = session?.user?.role === 'THREESC_LEAD';
@@ -146,39 +162,34 @@ function TicketsContent() {
     if (searchParams.get('unresponded') === 'true') setFilterUnresponded(true);
   }, [searchParams]);
 
-  const filteredTickets = tickets.filter((t) => {
-    const hasAlertFilter = !!(filterPriority || filterUnassigned || filterSlaAtRisk || filterSlaBreached || filterUnresponded);
-    if (hasAlertFilter && ['RESOLVED', 'CLOSED'].includes(t.status)) return false;
-    if (searchQuery && !(
-      t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (t.ticketKey ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (t.description ?? '').toLowerCase().includes(searchQuery.toLowerCase())
-    )) return false;
-    if (filterPriority && t.priority !== filterPriority) return false;
-    if (filterCategory && t.category !== filterCategory) return false;
-    if (filterClient && t.client?.id !== filterClient) return false;
-    if (filterProject && t.project?.id !== filterProject) return false;
-    if (filterDateFrom && new Date(t.createdAt) < new Date(filterDateFrom)) return false;
-    if (filterDateTo) {
-      const toDate = new Date(filterDateTo);
-      toDate.setHours(23, 59, 59, 999);
-      if (new Date(t.createdAt) > toDate) return false;
-    }
-    if (filterAgent && t.assignedTo?.id !== filterAgent) return false;
-    if (filterUnassigned && t.assignedTo?.id) return false;
-    if (filterSlaAtRisk && !t.slaBreachRisk) return false;
-    if (filterSlaBreached && !t.slaBreached) return false;
-    if (filterUnresponded && t.hasResponse) return false;
-    return true;
-  });
+  const filteredTickets = tickets;
 
-  const hasActiveFilters = !!(filterPriority || filterCategory || filterClient || filterProject || filterDateFrom || filterDateTo || filterAgent || filterUnassigned || filterSlaAtRisk || filterSlaBreached || filterUnresponded);
+  const activeFilterCount = [
+    filterPriority,
+    filterCategory,
+    filterClient,
+    filterProject,
+    filterDateFrom || filterDateTo,
+    filterAgent,
+    filterUnassigned,
+    filterSlaAtRisk,
+    filterSlaBreached,
+    filterUnresponded,
+  ].filter(Boolean).length;
+  const totalIssues = pagination.total;
+  const pageStart = totalIssues === 0 ? 0 : (pagination.page - 1) * pagination.pageSize + 1;
+  const pageEnd = Math.min(totalIssues, pagination.page * pagination.pageSize);
+  const visiblePages = Array.from(
+    new Set([1, pagination.page - 1, pagination.page, pagination.page + 1, pagination.totalPages]
+      .filter((n) => n >= 1 && n <= pagination.totalPages))
+  ).sort((a, b) => a - b);
 
   const clearFilters = () => {
     setFilterPriority(''); setFilterCategory(''); setFilterClient('');
     setFilterProject(''); setFilterDateFrom(''); setFilterDateTo('');
     setFilterAgent(''); setFilterUnassigned(false); setFilterSlaAtRisk(false);
     setFilterSlaBreached(false); setFilterUnresponded(false);
+    setPage(1);
   };
 
   const exportCSV = () => {
@@ -225,21 +236,74 @@ function TicketsContent() {
   useEffect(() => { setActiveTab(statusParam === 'ALL' ? 'ALL' : statusParam); }, [statusParam]);
 
   useEffect(() => {
+    setPage(1);
+  }, [
+    activeTab,
+    searchQuery,
+    filterPriority,
+    filterCategory,
+    filterClient,
+    filterProject,
+    filterDateFrom,
+    filterDateTo,
+    filterAgent,
+    filterUnassigned,
+    filterSlaAtRisk,
+    filterSlaBreached,
+    filterUnresponded,
+    pageSize,
+  ]);
+
+  useEffect(() => {
     const fetchTickets = async () => {
       setLoading(true);
       try {
         const params = new URLSearchParams();
+        params.set('page', String(page));
+        params.set('pageSize', String(pageSize));
         if (activeTab !== 'ALL') params.append('status', activeTab);
+        if (searchQuery) params.set('search', searchQuery);
+        if (filterPriority) params.set('priority', filterPriority);
+        if (filterCategory) params.set('category', filterCategory);
+        if (filterClient) params.set('clientId', filterClient);
+        if (filterProject) params.set('projectId', filterProject);
+        if (filterDateFrom) params.set('dateFrom', filterDateFrom);
+        if (filterDateTo) params.set('dateTo', filterDateTo);
+        if (filterAgent) params.set('assignedToId', filterAgent);
+        if (filterUnassigned) params.set('unassigned', 'true');
+        if (filterSlaAtRisk) params.set('slaAtRisk', 'true');
+        if (filterSlaBreached) params.set('slaBreached', 'true');
+        if (filterUnresponded) params.set('unresponded', 'true');
         const res = await fetch(`/api/dashboard/tickets?${params.toString()}`, { cache: 'no-store' });
         const data = await res.json();
-        setTickets(((data.tickets || []) as Ticket[]).sort(
-          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-        ));
+        setTickets((data.tickets || []) as Ticket[]);
+        setPagination(data.pagination ?? {
+          page,
+          pageSize,
+          total: (data.tickets || []).length,
+          totalPages: 1,
+        });
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     };
     fetchTickets();
-  }, [activeTab]);
+  }, [
+    activeTab,
+    searchQuery,
+    filterPriority,
+    filterCategory,
+    filterClient,
+    filterProject,
+    filterDateFrom,
+    filterDateTo,
+    filterAgent,
+    filterUnassigned,
+    filterSlaAtRisk,
+    filterSlaBreached,
+    filterUnresponded,
+    page,
+    pageSize,
+  ]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -259,7 +323,7 @@ function TicketsContent() {
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
-    router.push(tab === 'ALL' ? '/tickets' : `/tickets?status=${tab}`);
+    setPage(1);
   };
 
   const formatDateShort = (date: string) =>
@@ -299,39 +363,57 @@ function TicketsContent() {
         />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Tabs + filter bar merged into one compact header */}
-          <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-5 pt-2 pb-0">
-            {/* Tab row */}
-            <div className="flex items-center justify-between -mb-px">
-              <div className="flex gap-0">
+          <main className="flex-1 overflow-y-auto px-5 py-3">
+            {/* Compact control bar */}
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="order-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
                 {STATUS_TABS.map((tab) => (
                   <button
                     key={tab.key}
+                    type="button"
                     onClick={() => handleTabChange(tab.key)}
-                    className={`px-3.5 py-2 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
+                    className={`h-7 whitespace-nowrap rounded-md px-3 text-xs font-semibold transition-colors ${
                       activeTab === tab.key
-                        ? 'border-[#0052CC] text-[#0052CC] dark:text-blue-400 dark:border-blue-400'
-                        : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:border-slate-300'
+                        ? 'bg-[#0052CC] text-white shadow-sm'
+                        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
                     }`}
                   >
                     {tab.label}
                   </button>
                 ))}
               </div>
-              <button
-                onClick={exportCSV}
-                title="Export CSV"
-                className="flex items-center gap-1.5 px-2.5 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors mb-1"
-              >
-                <Download className="w-3 h-3" />
-                Export
-              </button>
-            </div>
-          </div>
 
-          <main className="flex-1 overflow-y-auto px-5 py-3">
-            {/* Filter bar */}
-            <div className="flex flex-wrap items-center gap-1.5 mb-3">
+              <button
+                type="button"
+                onClick={() => setShowFilters((current) => !current)}
+                className={`order-4 flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-colors ${
+                  showFilters || activeFilterCount > 0
+                    ? 'border-[#0052CC]/30 bg-blue-50 text-[#0052CC] dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                }`}
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <span className="rounded-full bg-[#0052CC] px-1.5 py-0.5 text-[10px] leading-none text-white">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+
+              {activeFilterCount > 0 && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="order-2 flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-slate-400 transition-colors hover:text-red-500"
+                >
+                  <X className="h-3 w-3" />
+                  Clear
+                </button>
+              )}
+
+              {showFilters && (
+                <div className="order-last grid w-full gap-2 border-t border-slate-100 pt-2 dark:border-slate-800 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
               <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} className={selectCls}>
                 <option value="">Priority</option>
                 <option value="CRITICAL">Critical</option>
@@ -343,9 +425,10 @@ function TicketsContent() {
               <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className={selectCls}>
                 <option value="">Category</option>
                 <option value="BUG">Bug</option>
-                <option value="FEATURE">Feature</option>
-                <option value="QUESTION">Question</option>
-                <option value="OTHER">Other</option>
+                <option value="FEATURE_REQUEST">Feature Request</option>
+                <option value="DATA_ACCURACY">Data Accuracy</option>
+                <option value="PERFORMANCE">Performance</option>
+                <option value="ACCESS_SECURITY">Access / Security</option>
               </select>
 
               {is3SCTeam && (
@@ -386,12 +469,17 @@ function TicketsContent() {
                 <span className="text-xs text-slate-400">–</span>
                 <input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} className={selectCls} />
               </div>
-
-              {hasActiveFilters && (
-                <button onClick={clearFilters} className="flex items-center gap-1 px-2 py-1 text-xs text-slate-400 hover:text-red-500 transition-colors">
-                  <X className="w-3 h-3" />Clear
-                </button>
+                </div>
               )}
+
+              <button
+                onClick={exportCSV}
+                title="Export CSV"
+                className="order-3 ml-auto flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
+              >
+                <Download className="w-3 h-3" />
+                Export
+              </button>
             </div>
 
             {/* Active alert filter chips */}
@@ -409,19 +497,6 @@ function TicketsContent() {
 
             {/* Table */}
             <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/30">
-                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                  {loading ? 'Loading…' : searchQuery
-                    ? `${filteredTickets.length} result${filteredTickets.length !== 1 ? 's' : ''} for "${searchQuery}"`
-                    : `${filteredTickets.length} issue${filteredTickets.length !== 1 ? 's' : ''}${hasActiveFilters ? ' (filtered)' : ''}`}
-                </p>
-                {searchQuery && (
-                  <button onClick={() => router.push('/tickets')} className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">
-                    <X className="w-3 h-3" />Clear search
-                  </button>
-                )}
-              </div>
-
               {loading ? (
                 <div className="p-6 space-y-2.5">
                   {Array.from({ length: 6 }).map((_, i) => (
@@ -435,7 +510,7 @@ function TicketsContent() {
                       <Search className="w-10 h-10 mx-auto mb-3 text-slate-300 dark:text-slate-600" />
                       <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">No results for &ldquo;{searchQuery}&rdquo;</p>
                       <p className="text-xs text-slate-400 mb-5">Try a different keyword or ticket key.</p>
-                      <Button variant="outline" size="sm" onClick={() => router.push('/tickets')}>
+                      <Button variant="outline" size="sm" onClick={() => router.push(activeTab === 'ALL' ? '/tickets' : `/tickets?status=${activeTab}`)}>
                         <X className="w-3.5 h-3.5 mr-1.5" />Clear search
                       </Button>
                     </>
@@ -529,6 +604,66 @@ function TicketsContent() {
                       })}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {!loading && totalIssues > 0 && (
+                <div className="flex flex-col gap-3 border-t border-slate-100 dark:border-slate-800 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                    Showing {pageStart}-{pageEnd} of {totalIssues}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={pageSize}
+                      onChange={(e) => setPageSize(Number(e.target.value))}
+                      className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 focus:border-[#0052CC] focus:outline-none focus:ring-2 focus:ring-[#0052CC]/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                      aria-label="Rows per page"
+                    >
+                      <option value={10}>10 / page</option>
+                      <option value={25}>25 / page</option>
+                      <option value={50}>50 / page</option>
+                      <option value={100}>100 / page</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setPage((current) => Math.max(1, current - 1))}
+                      disabled={pagination.page <= 1}
+                      className="h-8 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      Previous
+                    </button>
+                    <div className="hidden items-center gap-1 sm:flex">
+                      {visiblePages.map((pageNumber, index) => {
+                        const previousPage = visiblePages[index - 1];
+                        return (
+                          <div key={pageNumber} className="flex items-center gap-1">
+                            {previousPage && pageNumber - previousPage > 1 && (
+                              <span className="px-1 text-xs text-slate-400">...</span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setPage(pageNumber)}
+                              className={`h-8 min-w-8 rounded-lg px-2 text-xs font-semibold transition-colors ${
+                                pagination.page === pageNumber
+                                  ? 'bg-[#0052CC] text-white shadow-sm'
+                                  : 'border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+                              }`}
+                            >
+                              {pageNumber}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPage((current) => Math.min(pagination.totalPages, current + 1))}
+                      disabled={pagination.page >= pagination.totalPages}
+                      className="h-8 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
