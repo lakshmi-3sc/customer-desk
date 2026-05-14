@@ -143,7 +143,7 @@ export default function LeadDashboard() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/lead/stats");
+      const res = await fetch("/api/dashboard", { cache: "no-store" });
       if (res.ok) setData(await res.json());
     } catch {} finally { setLoading(false); }
   };

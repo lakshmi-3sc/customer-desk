@@ -210,7 +210,7 @@ function TicketsContent() {
 
   useEffect(() => {
     if (is3SCTeam) {
-      fetch('/api/admin/customers')
+      fetch('/api/dashboard/clients', { cache: 'no-store' })
         .then((r) => r.ok ? r.json() : { clients: [] })
         .then((d: { clients?: AdminClientOption[] }) => setClients((d.clients ?? []).map((c) => ({ id: c.id, name: c.name }))))
         .catch(() => {});

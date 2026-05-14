@@ -417,7 +417,7 @@ export default function AgentDashboard() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/agent/stats");
+      const res = await fetch("/api/dashboard", { cache: "no-store" });
       if (res.ok) setData(await res.json());
     } catch {
     } finally {

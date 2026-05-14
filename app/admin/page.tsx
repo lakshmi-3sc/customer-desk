@@ -132,7 +132,7 @@ export default function AdminDashboard() {
     const params = new URLSearchParams({ days: String(useDays) });
     if (useClient) params.set('clientId', useClient);
     try {
-      const res = await fetch('/api/admin/stats?' + params.toString());
+      const res = await fetch('/api/dashboard?' + params.toString(), { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setStats(data);

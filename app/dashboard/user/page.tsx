@@ -68,7 +68,7 @@ export default function UserDashboard() {
   const fetchIssues = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/dashboard/tickets", { cache: "no-store" });
+      const res = await fetch("/api/dashboard", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setIssues(data.tickets ?? []);

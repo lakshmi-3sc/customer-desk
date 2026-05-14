@@ -97,7 +97,7 @@ export default function ClientDashboard() {
 
   const fetchAll = async () => {
     try {
-      const res = await fetch("/api/dashboard/client-summary", { cache: "no-store" });
+      const res = await fetch("/api/dashboard", { cache: "no-store" });
       if (res.ok) {
         const d = await res.json();
         setKpiData(d.metrics);

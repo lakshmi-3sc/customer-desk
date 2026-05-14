@@ -69,7 +69,7 @@ export function ProfileDropdown() {
   };
 
   return (
-    <div ref={dropdownRef} className="relative">
+    <div ref={dropdownRef} className="relative z-[9998]">
       <button
         onClick={() => setOpen(!open)}
         className="flex h-9 items-center gap-2 rounded-lg px-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -81,7 +81,7 @@ export function ProfileDropdown() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 overflow-hidden">
+        <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-2xl z-[9999] overflow-hidden">
           {/* User info section */}
           <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border-b border-slate-200 dark:border-slate-700">
             <div className="flex items-start gap-3">

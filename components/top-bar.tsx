@@ -46,7 +46,7 @@ export function TopBar({ left, right }: TopBarProps) {
   }, []);
 
   return (
-    <header className="h-14 bg-white/95 dark:bg-slate-950/95 border-b border-slate-200 dark:border-slate-800 flex items-center px-6 flex-shrink-0 gap-4 backdrop-blur">
+    <header className="h-14 bg-white/95 dark:bg-slate-950/95 border-b border-slate-200 dark:border-slate-800 flex items-center px-6 flex-shrink-0 gap-4 backdrop-blur relative z-[9997]">
       {/* Left: breadcrumb / title */}
       <div className="flex min-w-0 flex-1 items-center">{left}</div>
 
