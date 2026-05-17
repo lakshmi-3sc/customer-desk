@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import Anthropic from "@anthropic-ai/sdk";
+import { canAccessTicket, getAccessUser, is3SCRole } from "@/lib/tenant-access";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -13,15 +14,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const currentUser = await getAccessUser(session);
+    if (!currentUser) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
     const { ticketId, force } = await request.json();
     if (!ticketId) {
       return NextResponse.json({ error: "ticketId required" }, { status: 400 });
     }
 
+    const allowed = await canAccessTicket(currentUser, ticketId);
+    if (!allowed) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     // Check if summary already exists
     const existing = await prisma.issue.findUnique({
       where: { id: ticketId },
-      select: { conversationSummary: true, comments: { select: { content: true, author: { select: { name: true } }, createdAt: true } } }
+      select: {
+        conversationSummary: true,
+        comments: {
+          where: !is3SCRole(currentUser.role) ? { isInternal: false } : undefined,
+          select: { content: true, author: { select: { name: true } }, createdAt: true },
+        },
+      },
     });
 
     if (existing?.conversationSummary && !force) {

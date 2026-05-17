@@ -11,6 +11,7 @@ import {
   BookOpen,
   Bell,
   Plus,
+  ShieldCheck,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -25,6 +26,9 @@ interface DashboardIssue {
   title: string;
   status: string;
   priority: string;
+  slaBreached?: boolean;
+  slaBreachRisk?: boolean;
+  createdAt?: string;
   updatedAt: string;
 }
 
@@ -37,7 +41,7 @@ function StatusLozenge({ status }: { status: string }) {
     CLOSED: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
   };
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${map[status] ?? map.CLOSED}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${map[status] ?? map.CLOSED}`}>
       {status.replace("_", " ")}
     </span>
   );
@@ -51,6 +55,19 @@ function PriorityDot({ priority }: { priority: string }) {
     LOW: "bg-blue-400",
   };
   return <span className={`inline-block w-2 h-2 rounded-full ${map[priority?.toUpperCase()] ?? "bg-slate-400"}`} title={priority} />;
+}
+
+function KpiSkeleton() {
+  return (
+    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 border-l-[3px] border-l-slate-200 px-4 py-3 shadow-sm">
+      <div className="flex items-center justify-between mb-2">
+        <div className="h-3 w-28 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+        <div className="h-6 w-6 rounded-md bg-slate-100 dark:bg-slate-800 animate-pulse" />
+      </div>
+      <div className="h-7 w-12 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+      <div className="mt-2 h-3 w-36 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+    </div>
+  );
 }
 
 export default function UserDashboard() {
@@ -86,6 +103,7 @@ export default function UserDashboard() {
 
   const openIssues = issues.filter((t) => t.status === "OPEN" || t.status === "ACKNOWLEDGED" || t.status === "IN_PROGRESS");
   const awaitingResponse = issues.filter((t) => t.status === "ACKNOWLEDGED");
+  const slaNeedsAttention = issues.filter((t) => t.slaBreached || t.slaBreachRisk);
   const resolvedThisMonth = issues.filter((t) => {
     if (t.status !== "RESOLVED" && t.status !== "CLOSED") return false;
     const d = new Date(t.updatedAt);
@@ -104,54 +122,28 @@ export default function UserDashboard() {
         <TopBar
           left={
             <div>
-              <h1 className="text-base font-semibold text-slate-900 dark:text-slate-100">My Dashboard</h1>
+              <h1 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                Welcome, {firstName}
+              </h1>
               <p className="text-xs text-slate-500 dark:text-slate-400">Personal issue tracker</p>
             </div>
           }
           right={null}
         />
 
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-5xl mx-auto space-y-6">
-
-            {/* Welcome Banner */}
-            <div className="relative overflow-hidden rounded-lg border border-blue-700/20 bg-[#0B55C8] p-5 text-white shadow-sm">
-              <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.22),transparent_48%)]" />
-              <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-                <div className="min-w-0">
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-blue-100/80">
-                    Personal support overview
-                  </p>
-                  <h2 className="text-xl font-semibold tracking-normal">
-                    Welcome back, {firstName}
-                  </h2>
-                  <p className="mt-1.5 max-w-2xl text-sm leading-5 text-blue-50/90">
-                    {loading
-                      ? "Loading your issue summary..."
-                      : openIssues.length === 0
-                        ? "You have no open issues right now. Everything looks clear."
-                        : `${openIssues.length} active issue${openIssues.length !== 1 ? "s" : ""} need your attention or are currently in progress.`}
-                  </p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-md bg-white/12 px-2.5 py-1 text-xs font-medium text-white ring-1 ring-white/15">
-                      <AlertCircle className="h-3.5 w-3.5 text-blue-100" />
-                      {loading ? "-" : openIssues.length} active
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 rounded-md bg-white/12 px-2.5 py-1 text-xs font-medium text-white ring-1 ring-white/15">
-                      <MessageSquare className="h-3.5 w-3.5 text-blue-100" />
-                      {loading ? "-" : awaitingResponse.length} awaiting response
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 rounded-md bg-white/12 px-2.5 py-1 text-xs font-medium text-white ring-1 ring-white/15">
-                      <CheckCircle className="h-3.5 w-3.5 text-blue-100" />
-                      {loading ? "-" : resolvedThisMonth.length} resolved this month
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
+        <main className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {loading ? (
+                <>
+                  <KpiSkeleton />
+                  <KpiSkeleton />
+                  <KpiSkeleton />
+                  <KpiSkeleton />
+                </>
+              ) : (
+                <>
               <div
                 onClick={() => router.push("/tickets?status=OPEN")}
                 className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 border-l-[3px] border-l-slate-400 px-4 py-3 cursor-pointer hover:shadow-md shadow-sm transition-all"
@@ -185,6 +177,22 @@ export default function UserDashboard() {
               </div>
 
               <div
+                onClick={() => router.push("/tickets")}
+                className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 border-l-[3px] border-l-orange-400 px-4 py-3 cursor-pointer hover:shadow-md shadow-sm transition-all"
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">SLA Attention</p>
+                  <div className="p-1 rounded-md bg-orange-50 dark:bg-orange-950/40">
+                    <ShieldCheck className="w-3 h-3 text-orange-500" />
+                  </div>
+                </div>
+                <p className="text-[22px] font-bold tabular-nums text-slate-900 dark:text-slate-50 leading-none">
+                  {loading ? "—" : slaNeedsAttention.length}
+                </p>
+                <p className="text-[11px] text-slate-400 mt-1">Breached or at risk</p>
+              </div>
+
+              <div
                 onClick={() => router.push("/tickets?status=RESOLVED")}
                 className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 border-l-[3px] border-l-emerald-400 px-4 py-3 cursor-pointer hover:shadow-md shadow-sm transition-all"
               >
@@ -201,20 +209,66 @@ export default function UserDashboard() {
                   {new Date().toLocaleString("en-US", { month: "long", year: "numeric" })}
                 </p>
               </div>
+                </>
+              )}
             </div>
 
+            {loading ? (
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-5 py-4 flex items-start gap-4">
+                <div className="h-5 w-5 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-52 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+                  <div className="h-3 w-72 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+                </div>
+                <div className="h-4 w-20 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+              </div>
+            ) : (
+              <div className={`rounded-xl border px-5 py-4 flex items-start gap-4 ${
+                slaNeedsAttention.length > 0
+                  ? "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/20"
+                  : "border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/20"
+              }`}>
+                <div className="flex-shrink-0 mt-0.5">
+                  {slaNeedsAttention.length > 0 ? (
+                    <AlertCircle className="w-5 h-5 text-red-500" />
+                  ) : (
+                    <CheckCircle className="w-5 h-5 text-emerald-600" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-sm font-bold ${slaNeedsAttention.length > 0 ? "text-red-700 dark:text-red-300" : "text-emerald-700 dark:text-emerald-300"}`}>
+                      Support Health: {slaNeedsAttention.length > 0 ? "Needs attention" : "Healthy"}
+                    </span>
+                    <span className={`w-2 h-2 rounded-full ${slaNeedsAttention.length > 0 ? "bg-red-400" : "bg-emerald-400"}`} />
+                  </div>
+                  <p className={`text-xs ${slaNeedsAttention.length > 0 ? "text-red-700 dark:text-red-300" : "text-emerald-700 dark:text-emerald-300"} opacity-90`}>
+                    {slaNeedsAttention.length > 0
+                      ? `${slaNeedsAttention.length} ticket${slaNeedsAttention.length !== 1 ? "s" : ""} may need a response or follow-up.`
+                      : "Your active tickets are currently within expected SLA windows."}
+                  </p>
+                </div>
+                <button
+                  onClick={() => router.push("/tickets")}
+                  className={`flex-shrink-0 text-xs font-medium ${slaNeedsAttention.length > 0 ? "text-red-700 dark:text-red-300" : "text-emerald-700 dark:text-emerald-300"} hover:underline flex items-center gap-1`}
+                >
+                  View tickets <ArrowUpRight className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+
             {/* Insights + Recent Issues (Two Column) */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
               {/* Left Column - Insights */}
               <div className="lg:col-span-1">
-                {isClientUser && <CustomerUserInsights />}
+                {isClientUser && <CustomerUserInsights issues={issues} loading={loading} />}
                 {isClientAdmin && <CustomerAdminInsights />}
               </div>
 
               {/* Right Column - Recent Issues */}
-              <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
               <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800">
-                <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">My Recent Issues</h2>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">My Recent Issues</h2>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -246,14 +300,14 @@ export default function UserDashboard() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b border-slate-100 dark:border-slate-800">
-                        <th className="text-left px-5 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">ID</th>
-                        <th className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Summary</th>
-                        <th className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">P</th>
-                        <th className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
-                        <th className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Updated</th>
+                        <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">ID</th>
+                        <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Summary</th>
+                        <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">P</th>
+                        <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
+                        <th className="text-left px-3 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Updated</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
@@ -269,7 +323,7 @@ export default function UserDashboard() {
                             </span>
                           </td>
                           <td className="px-3 py-3 max-w-[280px]">
-                            <span className="text-slate-800 dark:text-slate-200 truncate block">{t.title}</span>
+                            <span className="text-xs text-slate-800 dark:text-slate-200 truncate block">{t.title}</span>
                           </td>
                           <td className="px-3 py-3"><PriorityDot priority={t.priority} /></td>
                           <td className="px-3 py-3"><StatusLozenge status={t.status} /></td>
@@ -286,13 +340,13 @@ export default function UserDashboard() {
             </div>
 
             {/* AI Tip + Knowledge Base CTA */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               {/* AI Tip */}
-              <div className="flex items-start gap-3 px-4 py-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30">
+              <div className="flex items-start gap-3 px-4 py-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
                 <Lightbulb className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">AI Tip</p>
-                  <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5 leading-relaxed">
+                  <p className="text-sm font-bold text-slate-900 dark:text-slate-100">AI Tip</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
                     Before raising an issue, search our Knowledge Base — many common questions are answered there instantly, saving you waiting time.
                   </p>
                   <button
@@ -305,7 +359,7 @@ export default function UserDashboard() {
               </div>
 
               {/* Quick actions */}
-              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 space-y-2">
+              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-2">
                 <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">Quick Actions</p>
                 <button
                   onClick={() => router.push("/knowledge-base")}
@@ -324,7 +378,6 @@ export default function UserDashboard() {
               </div>
             </div>
 
-          </div>
         </main>
       </div>
     </div>

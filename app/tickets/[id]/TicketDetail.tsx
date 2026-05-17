@@ -34,6 +34,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
 import { getSocket } from "@/lib/socket-client";
 import { extractCopilotDiagnostic } from "@/lib/resolution-copilot";
+import { extractSmartAssignSummary } from "@/lib/smart-assign-codec";
 
 interface Attachment {
   id: string;
@@ -431,11 +432,12 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
     expertiseLabel: string; avgResolutionHrs: number | null;
     aiReason: string;
   };
-  const [routingAgents, setRoutingAgents] = useState<AgentRoutingData[]>([]);
-  const [routingBest, setRoutingBest] = useState<AgentRoutingData | null>(null);
+  const initialSmartAssign = extractSmartAssignSummary(initialTicket.aiSummary);
+  const [routingAgents, setRoutingAgents] = useState<AgentRoutingData[]>(initialSmartAssign?.agents ?? []);
+  const [routingBest, setRoutingBest] = useState<AgentRoutingData | null>(initialSmartAssign?.best ?? null);
   const [routingLoading, setRoutingLoading] = useState(false);
   const [routingExpanded, setRoutingExpanded] = useState(false);
-  const [routingAiSummary, setRoutingAiSummary] = useState('');
+  const [routingAiSummary, setRoutingAiSummary] = useState(initialSmartAssign?.aiSummary ?? '');
   const copilotDiagnostic = extractCopilotDiagnostic(ticket.aiSummary);
   const [copilotExpanded, setCopilotExpanded] = useState(false);
 
@@ -757,6 +759,14 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
   useEffect(() => {
     if (!ticket || !is3SCTeam) return;
     if (['RESOLVED', 'CLOSED'].includes(ticket.status)) return;
+    const storedSmartAssign = extractSmartAssignSummary(ticket.aiSummary);
+    if (storedSmartAssign?.best) {
+      setRoutingAgents(storedSmartAssign.agents ?? []);
+      setRoutingBest(storedSmartAssign.best);
+      setRoutingAiSummary(storedSmartAssign.aiSummary ?? '');
+      setRoutingLoading(false);
+      return;
+    }
     setRoutingLoading(true);
     const params = new URLSearchParams({
       category: ticket.category,
@@ -769,10 +779,36 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
         setRoutingAgents(data.agents ?? []);
         setRoutingBest(data.best ?? null);
         setRoutingAiSummary(data.aiSummary ?? '');
+        if (data.best) {
+          void fetch(`/api/dashboard/tickets/${ticket.id}/smart-assign-cache`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              agents: data.agents ?? [],
+              best: data.best,
+              aiSummary: data.aiSummary ?? "",
+            }),
+          })
+            .then((response) => (response.ok ? response.json() : null))
+            .then((cacheData) => {
+              if (!cacheData?.ticket?.aiSummary) return;
+              setTicket((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      aiSummary: cacheData.ticket.aiSummary,
+                      aiSuggestedAgent: cacheData.ticket.aiSuggestedAgent ?? prev.aiSuggestedAgent,
+                      assignedTo: cacheData.ticket.assignedTo ?? prev.assignedTo,
+                    }
+                  : prev
+              );
+            })
+            .catch(console.error);
+        }
       })
       .catch(console.error)
       .finally(() => setRoutingLoading(false));
-  }, [ticket?.id, is3SCTeam]);
+  }, [ticket?.id, ticket?.aiSummary, is3SCTeam]);
 
   // Resolution prediction
   useEffect(() => {
@@ -1373,6 +1409,12 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                     {is3SCTeam ? (
                       <select value={ticket.assignedTo?.id || ""} onChange={(e) => handleUpdateField("assignee", e.target.value || null)} disabled={updatingField === "assignee"} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0052CC] disabled:opacity-50">
                         <option value="">Unassigned</option>
+                        {ticket.assignedTo && !users.some((u) => u.id === ticket.assignedTo?.id) && (
+                          <option value={ticket.assignedTo.id}>{ticket.assignedTo.name}</option>
+                        )}
+                        {!ticket.assignedTo && routingBest && !users.some((u) => u.id === routingBest.id) && (
+                          <option value={routingBest.id}>{routingBest.name}</option>
+                        )}
                         {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
                       </select>
                     ) : ticket.assignedTo ? (

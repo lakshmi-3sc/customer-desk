@@ -29,6 +29,7 @@ model User {
   ledProjects     Project[]       @relation("AssignedLead")
   createdProjects Project[]       @relation("CreatedBy")
   kbFeedback      KnowledgeBaseFeedback[] @relation("KBFeedback")
+  aiConfigsUpdated AiConfig[]     @relation("AiConfigUpdatedBy")
 }
 
 model Client {
@@ -97,6 +98,27 @@ model SlaPolicy {
   resolutionTime Int
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+}
+
+model AiConfig {
+  id                   String   @id @default("global")
+  autoClassify         Boolean  @default(true)
+  autoAssign           Boolean  @default(true)
+  suggestedResponses   Boolean  @default(true)
+  resolutionPrediction Boolean  @default(true)
+  resolutionCopilot    Boolean  @default(true)
+  semanticSearch       Boolean  @default(true)
+  confidenceThreshold  Int      @default(70)
+  similarityThreshold  Int      @default(60)
+  autoApplyThreshold   Int      @default(80)
+  manualReviewThreshold Int     @default(60)
+  routingRules         Json?
+  updatedById          String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  updatedBy            User?    @relation("AiConfigUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([updatedById])
 }
 
 model Issue {

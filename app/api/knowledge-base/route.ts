@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
 import type { Prisma } from "@prisma/client";
+import { getAccessUser, is3SCRole } from "@/lib/tenant-access";
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,30 +12,33 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get("category") ?? "";
     const slug = searchParams.get("slug") ?? "";
     const session = await getServerSession(authOptions);
+    const currentUser = await getAccessUser(session);
+
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     // Get published articles only
     const where: Prisma.KnowledgeBaseWhereInput = { isPublished: true };
 
-    const role = session?.user?.role || "";
-    const is3SCTeam = ["THREESC_ADMIN", "THREESC_LEAD", "THREESC_AGENT"].includes(role);
-    const isClient = role.startsWith("CLIENT");
+    const is3SCTeam = is3SCRole(currentUser.role);
 
-    // Clients can't see internal articles
-    if (isClient) {
+    // Non-3SC users can't see internal articles or other clients' articles.
+    if (!is3SCTeam) {
       where.isInternal = false;
       // Clients see only articles for their client or public articles
-      const membership = session?.user?.id
-        ? await prisma.clientMember.findFirst({
-          where: { userId: session.user.id },
-          select: { clientId: true },
-        })
-        : null;
+      const membership = await prisma.clientMember.findFirst({
+        where: { userId: currentUser.id },
+        select: { clientId: true },
+      });
 
       if (membership?.clientId) {
         where.OR = [
           { clientId: null },
           { clientId: membership.clientId },
         ];
+      } else {
+        return NextResponse.json({ articles: [] });
       }
     }
     // 3SC team sees all articles (both internal and regular)

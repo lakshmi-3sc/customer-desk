@@ -1,108 +1,105 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { Zap, AlertCircle, CheckCircle2, Clock, TrendingDown } from "lucide-react";
 
-interface UserInsights {
-  raisedThisWeek: number;
-  activeTickets: { open: number; inProgress: number };
-  recentlyResolved: number;
-  delayedTickets: number;
-  delayedTicketsList: string[];
+interface InsightIssue {
+  status: string;
+  createdAt?: string;
+  updatedAt: string;
+  slaBreached?: boolean;
+  slaBreachRisk?: boolean;
 }
 
-export function CustomerUserInsights() {
-  const [insights, setInsights] = useState<UserInsights | null>(null);
-  const [loading, setLoading] = useState(true);
+export function CustomerUserInsights({
+  issues,
+  loading,
+}: {
+  issues: InsightIssue[];
+  loading: boolean;
+}) {
+  const now = new Date();
+  const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  useEffect(() => {
-    fetchInsights();
-  }, []);
+  const raisedThisWeek = issues.filter((issue) => {
+    const date = new Date(issue.createdAt ?? issue.updatedAt);
+    return date >= weekStart;
+  }).length;
 
-  const fetchInsights = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/summaries?period=WEEKLY");
-      if (res.ok) {
-        const data = await res.json();
-        const summary = data.summary;
+  const activeTickets = issues.filter((issue) =>
+    ["OPEN", "ACKNOWLEDGED", "IN_PROGRESS"].includes(issue.status),
+  ).length;
 
-        if (summary) {
-          setInsights({
-            raisedThisWeek: summary.raised,
-            activeTickets: {
-              open: summary.pending,
-              inProgress: summary.pending,
-            },
-            recentlyResolved: summary.resolved,
-            delayedTickets: summary.slaBreaches,
-            delayedTicketsList: [],
-          });
-        }
-      }
-    } catch (error) {
-      console.error("Failed to fetch insights:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const recentlyResolved = issues.filter((issue) => {
+    if (issue.status !== "RESOLVED" && issue.status !== "CLOSED") return false;
+    return new Date(issue.updatedAt) >= weekStart;
+  }).length;
 
-  if (loading || !insights) return null;
+  const delayedTickets = issues.filter((issue) => issue.slaBreached || issue.slaBreachRisk).length;
+
+  if (loading) {
+    return (
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+        <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="h-4 w-28 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+          <div className="h-4 w-4 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+        </div>
+        <div className="p-4 space-y-2">
+          {[...Array(4)].map((_, index) => (
+            <div key={index} className="p-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-950/30 flex items-start gap-3">
+              <div className="h-5 w-5 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 w-32 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+                <div className="h-3 w-44 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-3">
-      <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-        <Zap className="w-5 h-5 text-amber-500" />
-        Weekly Insights
-      </h3>
+    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+      <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Weekly Insights</h3>
+        <Zap className="w-4 h-4 text-slate-400" />
+      </div>
 
-      <div className="space-y-2">
-        {/* Tickets Raised */}
+      <div className="p-4 space-y-2">
         <InsightBox
           icon={<Zap className="w-5 h-5" />}
-          title={`${insights.raisedThisWeek} tickets raised`}
+          title={`${raisedThisWeek} tickets raised`}
           description="You raised this week"
-          color="bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800"
-          textColor="text-yellow-800 dark:text-yellow-300"
+          iconColor="text-amber-500"
         />
 
-        {/* Active Status */}
         <InsightBox
           icon={<Clock className="w-5 h-5" />}
-          title={`${insights.activeTickets.open} active`}
-          description={`${insights.activeTickets.open} open, awaiting response`}
-          color="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800"
-          textColor="text-blue-800 dark:text-blue-300"
+          title={`${activeTickets} active`}
+          description={`${activeTickets} open, acknowledged, or in progress`}
+          iconColor="text-blue-500"
         />
 
-        {/* Recently Resolved */}
         <InsightBox
           icon={<CheckCircle2 className="w-5 h-5" />}
-          title={`${insights.recentlyResolved} resolved`}
-          description="Great progress this week! ✓"
-          color="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800"
-          textColor="text-green-800 dark:text-green-300"
-          highlight
+          title={`${recentlyResolved} resolved`}
+          description="Resolved in the last 7 days"
+          iconColor="text-emerald-600"
         />
 
-        {/* Delays/SLA Risk */}
-        {insights.delayedTickets > 0 ? (
+        {delayedTickets > 0 ? (
           <InsightBox
             icon={<AlertCircle className="w-5 h-5" />}
-            title={`${insights.delayedTickets} ticket${insights.delayedTickets !== 1 ? "s" : ""} delayed`}
-            description="May need attention - check expected updates"
-            color="bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"
-            textColor="text-red-800 dark:text-red-300"
-            alert
+            title={`${delayedTickets} ticket${delayedTickets !== 1 ? "s" : ""} need attention`}
+            description="SLA breached or at risk"
+            iconColor="text-red-500"
           />
         ) : (
           <InsightBox
             icon={<TrendingDown className="w-5 h-5" />}
             title="No delays"
-            description="All your tickets are on track 🎉"
-            color="bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800"
-            textColor="text-emerald-800 dark:text-emerald-300"
-            highlight
+            description="All your tickets are on track"
+            iconColor="text-emerald-600"
           />
         )}
       </div>
@@ -114,27 +111,21 @@ function InsightBox({
   icon,
   title,
   description,
-  color,
-  textColor,
-  alert = false,
-  highlight = false,
+  iconColor,
 }: {
   icon: React.ReactNode;
   title: string;
   description: string;
-  color: string;
-  textColor: string;
-  alert?: boolean;
-  highlight?: boolean;
+  iconColor: string;
 }) {
   return (
-    <div className={`p-3 rounded-lg border flex items-start gap-3 ${color}`}>
-      <div className={`flex-shrink-0 mt-0.5 ${textColor}`}>{icon}</div>
+    <div className="p-3 rounded-lg border border-slate-100 dark:border-slate-800 flex items-start gap-3 bg-slate-50/60 dark:bg-slate-950/30">
+      <div className={`flex-shrink-0 mt-0.5 ${iconColor}`}>{icon}</div>
       <div className="flex-1">
-        <p className={`text-sm font-semibold ${textColor} ${highlight ? "font-bold" : ""}`}>
+        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
           {title}
         </p>
-        <p className={`text-xs mt-0.5 ${textColor} opacity-85`}>{description}</p>
+        <p className="text-xs mt-0.5 text-slate-500 dark:text-slate-400">{description}</p>
       </div>
     </div>
   );

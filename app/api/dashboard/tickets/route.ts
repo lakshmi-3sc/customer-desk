@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
         where: { userId: currentUser.id },
       });
       if (membership) where.clientId = membership.clientId;
+      else return NextResponse.json({ tickets: [], total: 0, page, pageSize, totalPages: 0 });
     } else if (role === "THREESC_AGENT") {
       // Agents only see tickets assigned to them
       where.assignedToId = currentUser.id;

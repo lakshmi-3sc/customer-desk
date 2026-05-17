@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { IssuePriority } from "@prisma/client";
 
-const SLA_DEFAULTS: Record<IssuePriority, { responseTime: number; resolutionTime: number }> = {
+export const SLA_DEFAULTS: Record<IssuePriority, { responseTime: number; resolutionTime: number }> = {
   CRITICAL: { responseTime: 1, resolutionTime: 4 },
   HIGH: { responseTime: 4, resolutionTime: 24 },
   MEDIUM: { responseTime: 8, resolutionTime: 72 },
@@ -17,6 +17,22 @@ interface TimeRemaining {
   displayText: string;
 }
 
+export async function getSlaPolicy(priority: IssuePriority) {
+  const fallback = SLA_DEFAULTS[priority] ?? SLA_DEFAULTS.MEDIUM;
+
+  try {
+    const policy = await prisma.slaPolicy.findUnique({
+      where: { priority },
+      select: { responseTime: true, resolutionTime: true },
+    });
+
+    return policy ?? fallback;
+  } catch (error) {
+    console.error("Error reading SLA policy, using fallback:", error);
+    return fallback;
+  }
+}
+
 export async function calculateSLADeadline(ticketId: string) {
   try {
     const ticket = await prisma.issue.findUnique({
@@ -26,7 +42,7 @@ export async function calculateSLADeadline(ticketId: string) {
 
     if (!ticket) return;
 
-    const slaConfig = SLA_DEFAULTS[ticket.priority as IssuePriority] || SLA_DEFAULTS.MEDIUM;
+    const slaConfig = await getSlaPolicy(ticket.priority as IssuePriority);
     const slaDueAt = new Date(ticket.createdAt.getTime() + slaConfig.resolutionTime * 60 * 60 * 1000);
 
     await prisma.issue.update({

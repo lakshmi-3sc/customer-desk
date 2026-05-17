@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NotificationType } from "@prisma/client";
 import { sendEmail } from "@/lib/email";
+import type { Server } from "socket.io";
 import {
   ticketAssignedEmail,
   statusChangedEmail,
@@ -53,6 +54,18 @@ export async function createNotification(
         message: message.substring(0, 500),
         issueId,
       },
+    });
+
+    // Push live notification when the custom Socket.IO server is running.
+    const io = (globalThis as { __socketio?: Server }).__socketio;
+    io?.to(`user:${userId}`).emit("notification:new", {
+      id: notification.id,
+      type: notification.type,
+      title: notification.title,
+      body: notification.message,
+      issueId: notification.issueId,
+      issueKey: emailCtx?.ticketKey ?? null,
+      createdAt: notification.createdAt.toISOString(),
     });
 
     // Fire email in background — never await, never throw

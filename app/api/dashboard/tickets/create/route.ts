@@ -11,12 +11,34 @@ import { sendEmail } from "@/lib/email";
 import { ticketCreatedEmail } from "@/lib/email-templates";
 import { uploadFilesToSupabase } from "@/lib/file-upload";
 import { encodeCopilotSummary, safeParseCopilotDiagnostic } from "@/lib/resolution-copilot";
+import { computeSmartAssign } from "@/lib/smart-assign";
+import { encodeSmartAssignSummary } from "@/lib/smart-assign-codec";
 
-interface CreateAttachmentInput {
-  name: string;
-  size: number;
-  type: string;
-  fileUrl: string;
+type RuntimeAiConfig = {
+  autoClassify: boolean;
+  autoAssign: boolean;
+  resolutionCopilot: boolean;
+};
+
+async function getRuntimeAiConfig(): Promise<RuntimeAiConfig> {
+  try {
+    const rows = await prisma.$queryRaw<RuntimeAiConfig[]>(Prisma.sql`
+      SELECT
+        "autoClassify",
+        "autoAssign",
+        "resolutionCopilot"
+      FROM "AiConfig"
+      WHERE "id" = 'global'
+      LIMIT 1
+    `);
+    return rows[0] ?? { autoClassify: true, autoAssign: true, resolutionCopilot: true };
+  } catch (error) {
+    const candidate = error as { code?: string; meta?: { code?: string } } | null;
+    if (candidate?.code !== "P2010" || candidate.meta?.code !== "42P01") {
+      console.error("Failed to read AI config, using defaults:", error);
+    }
+    return { autoClassify: true, autoAssign: true, resolutionCopilot: true };
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -130,21 +152,59 @@ export async function POST(req: NextRequest) {
       throw new Error("Unable to create a unique ticket key");
     }
 
-    // Await AI classification so fields are ready when user lands on the ticket page
+    const aiConfig = await getRuntimeAiConfig();
+
+    // Await AI classification and routing once so fields are ready when user lands on the ticket page.
     try {
-      const result = await classifyIssue(title, description);
-      const summary = `${result.reasoning}${result.module ? ` · Module: ${result.module}` : ""}`;
-      await prisma.issue.update({
+      const result = aiConfig.autoClassify
+        ? await classifyIssue(title, description)
+        : {
+            priority: issuePriority,
+            category: issueCategory,
+            reasoning: "AI auto-classification disabled by admin config.",
+            module: null,
+          };
+      const appliedPriority = aiConfig.autoClassify ? (submittedAiPriority ?? result.priority) : issuePriority;
+      const appliedCategory = aiConfig.autoClassify ? (submittedAiCategory ?? result.category) : issueCategory;
+      let summary = result.reasoning;
+      if (result.module) {
+        summary += ` · Module: ${result.module}`;
+      }
+
+      let smartAssign: Awaited<ReturnType<typeof computeSmartAssign>> = {
+        agents: [],
+        best: null,
+        aiSummary: "",
+      };
+      if (aiConfig.autoAssign) {
+        try {
+          smartAssign = await computeSmartAssign(appliedCategory, appliedPriority, title);
+        } catch (routingError) {
+          console.error("Smart assign failed:", routingError);
+        }
+      }
+      if (diagnostic && aiConfig.resolutionCopilot) {
+        summary = encodeCopilotSummary(summary, diagnostic);
+      }
+      if (smartAssign.best) {
+        summary = encodeSmartAssignSummary(summary, smartAssign);
+      }
+
+      ticket = await prisma.issue.update({
         where: { id: ticket.id },
         data: {
-          aiCategory: submittedAiCategory ?? result.category,
-          aiPriority: submittedAiPriority ?? result.priority,
-          aiSummary: diagnostic ? encodeCopilotSummary(summary, diagnostic) : summary,
+          category: appliedCategory,
+          priority: appliedPriority,
+          aiCategory: appliedCategory,
+          aiPriority: appliedPriority,
+          aiSuggestedAgent: smartAssign.best?.id ?? null,
+          assignedToId: smartAssign.best?.id ?? null,
+          aiSummary: summary,
         },
       });
     } catch (e) {
       console.error("AI classify failed:", e);
-      if (diagnostic) {
+      if (diagnostic && aiConfig.resolutionCopilot) {
         await prisma.issue.update({
           where: { id: ticket.id },
           data: { aiSummary: encodeCopilotSummary(null, diagnostic) },

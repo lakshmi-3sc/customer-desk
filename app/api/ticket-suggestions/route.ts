@@ -129,7 +129,7 @@ async function getExactMatchResults(
 
     return tickets
       .filter((ticket) => {
-        if (ticket.clientId && userClientIds.length > 0 && !userClientIds.includes(ticket.clientId)) {
+        if (!role.startsWith("THREESC_") && (!ticket.clientId || !userClientIds.includes(ticket.clientId))) {
           return false;
         }
 
@@ -207,10 +207,8 @@ async function getFullTextSearchResults(
     resolvedTickets = allTickets
       .filter((t) => {
         // Check client access - ticket must belong to one of user's clients
-        if (t.clientId && userClientIds.length > 0) {
-          if (!userClientIds.includes(t.clientId)) {
-            return false; // User doesn't have access to this client's tickets
-          }
+        if (!role.startsWith("THREESC_") && (!t.clientId || !userClientIds.includes(t.clientId))) {
+          return false; // User doesn't have access to this client's tickets
         }
 
         const titleMatch = t.title.toLowerCase().includes(queryLower);
@@ -263,7 +261,7 @@ async function getFullTextSearchResults(
         }
 
         // Check clientId access
-        if (a.clientId && userClientIds.length > 0) {
+        if (a.clientId && !role.startsWith("THREESC_")) {
           if (!userClientIds.includes(a.clientId)) {
             return false; // User doesn't have access to this client's articles
           }
@@ -449,9 +447,8 @@ async function semanticRankCandidates(
 
         const visibleTickets = allTickets.filter(
           (t) =>
-            !t.clientId ||
-            userClientIds.length === 0 ||
-            userClientIds.includes(t.clientId)
+            role.startsWith("THREESC_") ||
+            (Boolean(t.clientId) && userClientIds.includes(t.clientId))
         );
         const resolutionByTicketId = await getLatestVisibleResolutionMap(
           visibleTickets.map((ticket) => ticket.id),
@@ -476,8 +473,8 @@ async function semanticRankCandidates(
           ...allArticles
             .filter(
               (a) =>
+                role.startsWith("THREESC_") ||
                 !a.clientId ||
-                userClientIds.length === 0 ||
                 userClientIds.includes(a.clientId)
             )
             .map((a) => ({

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import Anthropic from "@anthropic-ai/sdk";
+import { canAccessTicket, getAccessUser, is3SCRole } from "@/lib/tenant-access";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -13,11 +14,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const currentUser = await getAccessUser(session);
+    if (!currentUser) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
     const { searchParams } = new URL(request.url);
     const ticketId = searchParams.get("ticketId");
 
     if (!ticketId) {
       return NextResponse.json({ error: "ticketId required" }, { status: 400 });
+    }
+
+    const allowed = await canAccessTicket(currentUser, ticketId);
+    if (!allowed) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     // Fetch ticket with all comments
@@ -28,6 +39,7 @@ export async function GET(request: NextRequest) {
         description: true,
         status: true,
         comments: {
+          where: !is3SCRole(currentUser.role) ? { isInternal: false } : undefined,
           select: {
             content: true,
             author: { select: { name: true } },

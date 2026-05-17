@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { canAccessTicket, getAccessUser, is3SCRole } from "@/lib/tenant-access";
 
 export async function GET(request: Request) {
   try {
@@ -13,9 +14,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const currentUser = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    });
+    const currentUser = await getAccessUser(session);
 
     if (!currentUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -23,7 +22,7 @@ export async function GET(request: Request) {
 
     // Get the client this user belongs to (if client-side)
     let clientId: string | undefined;
-    if (!currentUser.role.startsWith("THREESC_")) {
+    if (!is3SCRole(currentUser.role)) {
       const membership = await prisma.clientMember.findFirst({
         where: { userId: currentUser.id },
       });
@@ -31,6 +30,13 @@ export async function GET(request: Request) {
     }
 
     // Fetch last 20 IssueHistory entries — filtered by issueId if provided
+    if (issueId) {
+      const allowed = await canAccessTicket(currentUser, issueId);
+      if (!allowed) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
+
     const history = await prisma.issueHistory.findMany({
       where: issueId
         ? { issueId }

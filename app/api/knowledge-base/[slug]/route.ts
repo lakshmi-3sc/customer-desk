@@ -2,10 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
+import { canAccessKnowledgeBaseArticle, getAccessUser } from "@/lib/tenant-access";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
+    const session = await getServerSession(authOptions);
+    const currentUser = await getAccessUser(session);
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { slug } = await params;
+    const allowed = await canAccessKnowledgeBaseArticle(currentUser, slug);
+    if (!allowed) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const article = await prisma.knowledgeBase.findUnique({
       where: { id: slug },
       include: {

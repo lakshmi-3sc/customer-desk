@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Bell, X, AlertTriangle, MessageSquare, ArrowRight, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getSocket } from "@/lib/socket-client";
 
 const TYPE_META: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
   status_change: { icon: Info, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-100 dark:bg-blue-950" },
@@ -31,6 +33,7 @@ interface NotificationItem {
 
 export function NotificationBell() {
   const router = useRouter();
+  const { data: session, status } = useSession();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
@@ -40,16 +43,19 @@ export function NotificationBell() {
   const hasFetchedRef = useRef(false);
   const [panelPosition, setPanelPosition] = useState({ top: 0, right: 0 });
 
-  const fetchNotifications = async () => {
+  const getStoredReadIds = useCallback(() =>
+    new Set<string>(
+      JSON.parse(typeof window !== "undefined" ? (localStorage.getItem("notif-read") ?? "[]") : "[]")
+    ), []);
+
+  const fetchNotifications = useCallback(async () => {
     try {
       hasFetchedRef.current = true;
       const res = await fetch("/api/notifications");
       if (res.ok) {
         const data = await res.json();
         setNotifications(data.notifications ?? []);
-        const ids = new Set<string>(
-          JSON.parse(typeof window !== "undefined" ? (localStorage.getItem("notif-read") ?? "[]") : "[]")
-        );
+        const ids = getStoredReadIds();
         const newCount = ((data.notifications ?? []) as NotificationItem[]).filter((n) => !ids.has(n.id)).length;
         setUnreadCount(Math.min(newCount, 9));
         setReadIds(ids);
@@ -57,7 +63,7 @@ export function NotificationBell() {
     } catch (e) {
       console.error(e);
     }
-  };
+  }, [getStoredReadIds]);
 
   useEffect(() => {
     const timeout = setTimeout(fetchNotifications, 3000);
@@ -66,7 +72,36 @@ export function NotificationBell() {
       clearTimeout(timeout);
       clearInterval(interval);
     };
-  }, []);
+  }, [fetchNotifications]);
+
+  useEffect(() => {
+    if (status !== "authenticated" || !session?.user?.id) return;
+
+    const socket = getSocket();
+    const userId = session.user.id;
+    const joinUserRoom = () => socket.emit("join:user", userId);
+    const handleNewNotification = (notification: NotificationItem) => {
+      const ids = getStoredReadIds();
+      setReadIds(ids);
+
+      setNotifications((current) => {
+        if (current.some((item) => item.id === notification.id)) return current;
+        if (!ids.has(notification.id)) {
+          setUnreadCount((count) => Math.min(count + 1, 9));
+        }
+        return [notification, ...current].slice(0, 30);
+      });
+    };
+
+    if (socket.connected) joinUserRoom();
+    socket.on("connect", joinUserRoom);
+    socket.on("notification:new", handleNewNotification);
+
+    return () => {
+      socket.off("connect", joinUserRoom);
+      socket.off("notification:new", handleNewNotification);
+    };
+  }, [getStoredReadIds, session?.user?.id, status]);
 
   // Close when clicking outside
   useEffect(() => {

@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveTicketId } from "@/lib/resolve-ticket";
 import { extractMentions, findUserByMention, createNotification, isUserMentionable } from "@/lib/notifications";
 import { uploadFilesToSupabase } from "@/lib/file-upload";
+import { canAccessTicket, getAccessUser, is3SCRole } from "@/lib/tenant-access";
 import type { EmailContext } from "@/lib/notifications";
 import type { Server } from "socket.io";
 
@@ -14,17 +15,29 @@ export async function GET(
 ) {
   try {
     const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const currentUser = await getAccessUser(session);
+    if (!currentUser) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
     const { id: idOrKey } = await params;
     const id = await resolveTicketId(idOrKey);
     if (!id) return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+
+    const allowed = await canAccessTicket(currentUser, id);
+    if (!allowed) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const allComments = await prisma.comment.findMany({
       where: {
         issueId: id,
         // Clients cannot see internal notes
-        ...(session?.user?.role && ["CLIENT_USER", "CLIENT_ADMIN"].includes(session.user.role)
-          ? { isInternal: false }
-          : {}),
+        ...(!is3SCRole(currentUser.role) ? { isInternal: false } : {}),
       },
       include: {
         author: {
@@ -100,6 +113,16 @@ export async function POST(
       return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
     }
 
+    const currentUser = await getAccessUser(session);
+    if (!currentUser) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const allowed = await canAccessTicket(currentUser, id);
+    if (!allowed) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     // If replying, verify parent comment exists and belongs to this ticket
     if (parentId) {
       const parent = await prisma.comment.findUnique({ where: { id: parentId } });
@@ -109,7 +132,7 @@ export async function POST(
     }
 
     // Only 3SC team members can post internal notes
-    const is3SCTeam = session.user.role && ["THREESC_ADMIN", "THREESC_LEAD", "THREESC_AGENT"].includes(session.user.role);
+    const is3SCTeam = is3SCRole(currentUser.role);
     const markInternal = isInternal === true && !!is3SCTeam;
 
     // Create the comment
@@ -230,7 +253,7 @@ export async function POST(
     }
 
     // Broadcast the new comment to all users viewing this ticket via Socket.io
-    const io: Server | undefined = (global as any).__socketio;
+    const io = (globalThis as { __socketio?: Server }).__socketio;
     if (io) {
       io.to(`ticket:${id}`).emit("comment:added", comment);
     }

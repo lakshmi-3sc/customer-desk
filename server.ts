@@ -1,6 +1,7 @@
 import { createServer } from "http";
 import { Server } from "socket.io";
 import next from "next";
+import { getToken } from "next-auth/jwt";
 
 const port = parseInt(process.env.PORT || "3000", 10);
 const dev = process.env.NODE_ENV !== "production";
@@ -18,9 +19,25 @@ app.prepare().then(() => {
   });
 
   // Make the io instance globally accessible so API routes can emit events
-  (global as any).__socketio = io;
+  (globalThis as { __socketio?: Server }).__socketio = io;
 
-  io.on("connection", (socket) => {
+  io.on("connection", async (socket) => {
+    const token = await getToken({
+      req: socket.request as unknown as Parameters<typeof getToken>[0]["req"],
+      secret: process.env.NEXTAUTH_SECRET,
+    });
+    const userId = typeof token?.id === "string" ? token.id : null;
+
+    if (userId) {
+      socket.join(`user:${userId}`);
+    }
+
+    socket.on("join:user", (requestedUserId?: string) => {
+      if (userId && (!requestedUserId || requestedUserId === userId)) {
+        socket.join(`user:${userId}`);
+      }
+    });
+
     // Client subscribes to updates for a specific ticket
     socket.on("join:ticket", (ticketId: string) => {
       socket.join(`ticket:${ticketId}`);
