@@ -62,6 +62,75 @@ function cleanCopilotText(value: string) {
     .trim();
 }
 
+function buildFallbackAnalysis(
+  title: string,
+  description: string,
+  suggestions: CopilotSuggestion[],
+): CopilotAnalysis {
+  const text = `${title} ${description}`.toLowerCase();
+  const similarTicket = suggestions.find((item) => item.type === "ticket") ?? null;
+  const relatedArticle = suggestions.find((item) => item.type === "article") ?? null;
+
+  const isInventory = /inventory|stock|warehouse|sku|safety stock|overstock|ordering/.test(text);
+  const isAccess = /login|password|session|access|permission|authentication|sso/.test(text);
+  const isPerformance = /slow|delay|latency|timeout|load|performance/.test(text);
+  const isData = /wrong|incorrect|old data|stale|not reflect|mismatch|accuracy|sync/.test(text);
+
+  let likelyCauses = [
+    "Issue needs support review based on the provided details",
+    "Configuration or data sync may not be behaving as expected",
+  ];
+  let suggestedAction = "Confirm the affected area and create the ticket with the available details.";
+  let questions = [
+    "Which page, report, or module is affected?",
+    "Does this affect all users or only specific users or locations?",
+  ];
+
+  if (isInventory || isData) {
+    likelyCauses = [
+      "Dashboard data may be stale or not refreshing after warehouse updates",
+      "Inventory sync or reporting refresh may be delayed",
+    ];
+    suggestedAction = "Check whether the latest warehouse update is visible in the source inventory screen before creating the ticket.";
+    questions = [
+      "Which warehouse, SKU, or product category is affected?",
+      "When was the stock updated and when did the dashboard last refresh?",
+    ];
+  } else if (isAccess) {
+    likelyCauses = [
+      "User access or authentication state may not be updating correctly",
+      "Session or permission changes may not be applied consistently",
+    ];
+    suggestedAction = "Try signing out and signing in again once, then create the ticket if the issue remains.";
+    questions = [
+      "Is this affecting one user or multiple users?",
+      "Which account or role is affected?",
+    ];
+  } else if (isPerformance) {
+    likelyCauses = [
+      "The affected page or report may be taking longer than expected to refresh",
+      "Recent data volume or service delay may be slowing the workflow",
+    ];
+    suggestedAction = "Retry the affected action once and note the page or action that is slow.";
+    questions = [
+      "Which page or action is slow?",
+      "When did you first notice the delay?",
+    ];
+  }
+
+  const knownText = `${title} ${description}`;
+  questions = questions.filter((question) => !questionRepeatsKnownInfo(question, knownText)).slice(0, 2);
+
+  return {
+    likelyCauses,
+    questions,
+    suggestedAction,
+    confidence: similarTicket || relatedArticle ? 70 : 58,
+    similarTicket,
+    relatedArticle,
+  };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -82,24 +151,18 @@ export async function POST(req: NextRequest) {
     const relatedArticle = suggestions.find((item) => item.type === "article") ?? null;
 
     if (!process.env.ANTHROPIC_API_KEY) {
-      return NextResponse.json({
-        likelyCauses: ["Needs agent review"],
-        questions: ["Where are you seeing this issue?", "Is it affecting all users or only some users?", "When did you first notice it?"],
-        suggestedAction: "Collect the affected scope, timing, and error evidence before creating the ticket.",
-        confidence: 55,
-        similarTicket,
-        relatedArticle,
-      } satisfies CopilotAnalysis);
+      return NextResponse.json(buildFallbackAnalysis(title, description, suggestions));
     }
 
-    const message = await anthropic.messages.create({
-      model: COPILOT_MODEL,
-      max_tokens: 700,
-      temperature: 0.2,
-      messages: [
-        {
-          role: "user",
-          content: `You are a support intake copilot. Generate a concise diagnostic path for a customer before they create a ticket.
+    try {
+      const message = await anthropic.messages.create({
+        model: COPILOT_MODEL,
+        max_tokens: 700,
+        temperature: 0.2,
+        messages: [
+          {
+            role: "user",
+            content: `You are a support intake copilot. Generate a concise diagnostic path for a customer before they create a ticket.
 
 Issue title: ${title}
 Description: ${description}
@@ -138,33 +201,37 @@ Rules for suggestedAction:
 - This is shown to the customer as "Try first", so keep it to one short, practical observation or check the customer can do.
 - Do not ask for logs, code, database checks, deployment details, or configuration inspection.
 - Do not include vague numbered references like "ticket #1"; say "related resolved case" only if needed.`,
-        },
-      ],
-    });
+          },
+        ],
+      });
 
-    const text = message.content[0]?.type === "text" ? message.content[0].text : "";
-    const parsed = parseJsonObject<Omit<CopilotAnalysis, "similarTicket" | "relatedArticle">>(text);
+      const text = message.content[0]?.type === "text" ? message.content[0].text : "";
+      const parsed = parseJsonObject<Omit<CopilotAnalysis, "similarTicket" | "relatedArticle">>(text);
 
-    if (!parsed) {
-      throw new Error("Resolution Copilot returned invalid JSON");
+      if (!parsed) {
+        throw new Error("Resolution Copilot returned invalid JSON");
+      }
+
+      const knownText = `${title} ${description}`;
+      const likelyCauses = (parsed.likelyCauses ?? []).map(cleanCopilotText).filter(Boolean).slice(0, 2);
+      const questions = (parsed.questions ?? [])
+        .map(cleanCopilotText)
+        .filter((question) => question && !questionRepeatsKnownInfo(question, knownText))
+        .slice(0, 2);
+      const suggestedAction = cleanCopilotText(parsed.suggestedAction ?? "") || "Collect key details before creating the ticket.";
+
+      return NextResponse.json({
+        likelyCauses,
+        questions,
+        suggestedAction,
+        confidence: Math.max(0, Math.min(100, Number(parsed.confidence) || 60)),
+        similarTicket,
+        relatedArticle,
+      } satisfies CopilotAnalysis);
+    } catch (aiError) {
+      console.warn("[resolution-copilot/analyze] AI fallback used:", aiError);
+      return NextResponse.json(buildFallbackAnalysis(title, description, suggestions));
     }
-
-    const knownText = `${title} ${description}`;
-    const likelyCauses = (parsed.likelyCauses ?? []).map(cleanCopilotText).filter(Boolean).slice(0, 2);
-    const questions = (parsed.questions ?? [])
-      .map(cleanCopilotText)
-      .filter((question) => question && !questionRepeatsKnownInfo(question, knownText))
-      .slice(0, 2);
-    const suggestedAction = cleanCopilotText(parsed.suggestedAction ?? "") || "Collect key details before creating the ticket.";
-
-    return NextResponse.json({
-      likelyCauses,
-      questions,
-      suggestedAction,
-      confidence: Math.max(0, Math.min(100, Number(parsed.confidence) || 60)),
-      similarTicket,
-      relatedArticle,
-    } satisfies CopilotAnalysis);
   } catch (error) {
     console.error("[resolution-copilot/analyze]", error);
     return NextResponse.json({ error: "Failed to analyze issue" }, { status: 500 });

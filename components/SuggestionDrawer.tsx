@@ -64,17 +64,17 @@ export function SuggestionDrawer({
   return (
     <>
       <div
-        className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm transition-opacity duration-300 dark:bg-black/50"
+        className="fixed inset-0 z-[10000] bg-black/30 backdrop-blur-sm transition-opacity duration-300 dark:bg-black/50"
         style={{ pointerEvents: "none" }}
         aria-hidden="true"
       />
 
-      <div className="fixed right-0 top-0 z-50 flex h-screen w-full max-w-2xl animate-in flex-col overflow-hidden bg-white shadow-2xl duration-300 slide-in-from-right-96 dark:bg-slate-950">
-        <div className="relative border-b border-slate-200 bg-white px-6 py-5 dark:border-slate-800 dark:bg-slate-900">
+      <div className="fixed inset-y-0 right-0 z-[10001] flex h-[100dvh] w-full max-w-[640px] animate-in flex-col overflow-hidden bg-white shadow-2xl duration-300 slide-in-from-right-96 dark:bg-slate-950">
+        <div className="relative shrink-0 border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-800 dark:bg-slate-900">
           <div className="absolute inset-x-0 top-0 h-1 bg-[#0052CC]" />
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
-              <div className="mb-2 flex items-center gap-2">
+              <div className="mb-1.5 flex items-center gap-2">
                 {item.type === "article" ? (
                   <>
                     <BookOpen className="h-4 w-4 text-green-600 dark:text-green-400" />
@@ -96,7 +96,7 @@ export function SuggestionDrawer({
                   </>
                 )}
               </div>
-              <h2 className="text-lg font-bold leading-snug text-slate-900 dark:text-slate-100">
+              <h2 className="line-clamp-2 text-base font-bold leading-snug text-slate-900 dark:text-slate-100">
                 {item.title}
               </h2>
             </div>
@@ -107,7 +107,7 @@ export function SuggestionDrawer({
                   href={openHref}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex h-9 items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-[#0052CC] transition-colors hover:border-blue-300 hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/50"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 text-xs font-semibold text-[#0052CC] transition-colors hover:border-blue-300 hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/50"
                 >
                   {item.type === "ticket" ? "Open ticket" : "Open article"}
                   <ExternalLink className="h-3.5 w-3.5" />
@@ -116,7 +116,7 @@ export function SuggestionDrawer({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex h-9 w-9 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
                 aria-label="Close"
               >
                 <X className="h-5 w-5" />
@@ -143,7 +143,7 @@ export function SuggestionDrawer({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-slate-50/60 px-6 py-6 dark:bg-slate-950">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/60 px-5 py-5 dark:bg-slate-950">
           {item.type === "article" ? (
             <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               {item.category && (
@@ -257,18 +257,27 @@ export function SuggestionDrawer({
         </div>
 
         <div
-          className="flex items-center justify-between border-t border-slate-200 bg-white px-6 py-4 dark:border-slate-800 dark:bg-slate-900"
+          className="shrink-0 flex items-center justify-between border-t border-slate-200 bg-white px-5 py-3 dark:border-slate-800 dark:bg-slate-900"
           style={{ pointerEvents: "auto" }}
         >
-          <button
-            type="button"
-            onClick={handlePrev}
-            disabled={!hasPrev}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-all hover:border-blue-400 hover:text-slate-900 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-blue-500 dark:hover:text-slate-100"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Back
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-9 items-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition-all hover:border-blue-400 hover:text-slate-900 hover:shadow-md dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-blue-500 dark:hover:text-slate-100"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={handlePrev}
+              disabled={!hasPrev}
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition-all hover:border-blue-400 hover:text-slate-900 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-blue-500 dark:hover:text-slate-100"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Back
+            </button>
+          </div>
 
           <div className="flex items-center gap-3">
             <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
@@ -280,7 +289,7 @@ export function SuggestionDrawer({
             type="button"
             onClick={handleNext}
             disabled={!hasNext}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-md transition-all hover:bg-blue-700 hover:shadow-lg disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-slate-700"
+            className="inline-flex h-9 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white shadow-md transition-all hover:bg-blue-700 hover:shadow-lg disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-slate-700"
           >
             Next
             <ChevronRight className="h-4 w-4" />
