@@ -521,6 +521,11 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
     return () => clearInterval(interval);
   }, [ticket?.slaDueAt]);
 
+  const slaDueTime = ticket?.slaDueAt ? new Date(ticket.slaDueAt).getTime() : null;
+  const isSlaPastDue = slaDueTime !== null && slaDueTime <= Date.now();
+  const isSlaBreached = Boolean(ticket?.slaBreached || isSlaPastDue);
+  const isSlaAtRisk = Boolean(!isSlaBreached && ticket?.slaBreachRisk);
+
   // Background: secondary data — non-blocking, page already visible
   useEffect(() => {
     if (!ticket?.id) return;
@@ -900,11 +905,11 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                       Project: <span className="font-medium text-slate-700 dark:text-slate-300">{ticket.project.name}</span>
                     </p>
                   )}
-                  {(ticket.slaBreached || ticket.slaBreachRisk || ticket.slaDueAt) && (
+                  {(isSlaBreached || isSlaAtRisk || ticket.slaDueAt) && (
                     <div className={`mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border px-3 py-2 text-xs ${
-                      ticket.slaBreached
+                      isSlaBreached
                         ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300'
-                        : ticket.slaBreachRisk
+                        : isSlaAtRisk
                         ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-300'
                         : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-300'
                     }`}>
@@ -912,12 +917,12 @@ export default function TicketDetail({ initialTicket, initialComments, idOrKey }
                         <ShieldAlert className="h-3.5 w-3.5" />
                         SLA:
                       </span>
-                      <span>{slaCountdown || (ticket.slaBreached ? "Breached" : "Tracking")}</span>
+                      <span>{slaCountdown || (isSlaBreached ? "Breached" : "Tracking")}</span>
                       <span className="text-slate-300 dark:text-slate-600">|</span>
                       <span>{getSlaResponseTarget(ticket.priority)}</span>
                       <span className="text-slate-300 dark:text-slate-600">|</span>
                       <span className="font-semibold">
-                        {ticket.slaBreached ? "Breached" : ticket.slaBreachRisk ? "At risk" : "Healthy"}
+                        {isSlaBreached ? "Breached" : isSlaAtRisk ? "At risk" : "On track"}
                       </span>
                     </div>
                   )}

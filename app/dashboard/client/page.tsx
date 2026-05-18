@@ -138,10 +138,13 @@ export default function ClientDashboard() {
   const openTickets = kpiData?.openTickets ?? 0;
   const criticalCount = kpiData?.criticalIssues ?? 0;
   const resolvedCount = kpiData?.resolvedTickets ?? 0;
-  const slaCompliance = reportsData?.slaCompliance ?? 100;
   const avgResolutionDays = reportsData?.avgResolutionDays ?? 0;
   const slaBreached = kpiData?.slaBreachedCount ?? 0;
   const slaAtRisk = kpiData?.slaBreachRiskCount ?? 0;
+  const totalIssues = kpiData?.totalIssues ?? 0;
+  const slaHealth = totalIssues > 0
+    ? Math.max(0, Math.round(((totalIssues - slaBreached) / totalIssues) * 100))
+    : 100;
 
   // Account health status
   const accountStatus: "critical" | "warning" | "healthy" =
@@ -194,7 +197,7 @@ export default function ClientDashboard() {
     { label: "Open Tickets",   value: openTickets,   sub: "active issues",        icon: AlertCircle, accent: "border-l-slate-400",   iconCls: "bg-slate-100 text-slate-500",    route: "/tickets?status=OPEN" },
     { label: "Critical",       value: criticalCount,  sub: "needs immediate action", icon: Flame,    accent: "border-l-red-500",     iconCls: "bg-red-50 text-red-500",         route: "/tickets?priority=CRITICAL" },
     { label: "Resolved",       value: resolvedCount,  sub: "all time",             icon: CheckCircle, accent: "border-l-emerald-400", iconCls: "bg-emerald-50 text-emerald-600", route: "/tickets?status=RESOLVED" },
-    { label: "SLA Compliance", value: `${slaCompliance}%`, sub: "on-time resolution", icon: ShieldCheck, accent: "border-l-blue-400", iconCls: "bg-blue-50 text-blue-500",    route: null },
+    { label: "SLA Health", value: `${slaHealth}%`, sub: slaBreached > 0 ? `${slaBreached} breached` : "no breaches", icon: ShieldCheck, accent: "border-l-blue-400", iconCls: "bg-blue-50 text-blue-500",    route: null },
     { label: "Avg Resolution", value: avgResolutionDays > 0 ? `${avgResolutionDays}d` : "—", sub: "per ticket", icon: Timer, accent: "border-l-slate-400", iconCls: "bg-slate-100 text-slate-500", route: null },
   ];
 
@@ -269,7 +272,7 @@ export default function ClientDashboard() {
             </div>
           )}
 
-          {/* Row 1 — Active Issues (2/3) | Top Active Users (1/3) */}
+          {/* Row 1 — Active Issues (2/3) | Blockers & Escalations (1/3) */}
           <div className="grid grid-cols-3 gap-5">
             {/* Active Issues Table */}
             <div className="col-span-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
@@ -329,62 +332,53 @@ export default function ClientDashboard() {
               )}
             </div>
 
-            {/* Top Active Users */}
-            <div className="col-span-1 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Active Users</h2>
-                <Users className="w-4 h-4 text-slate-400" />
+            {/* Current Blockers / Escalations */}
+            <div className="col-span-1 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col">
+              <div className="px-4 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+                <Flame className="w-3.5 h-3.5 text-red-500" />
+                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Blockers & Escalations</h2>
               </div>
-              {activeUsers.length === 0 ? (
-                <p className="text-xs text-slate-400 text-center py-6">No user data</p>
-              ) : (
-                <div className="space-y-3">
-                  {activeUsers.map((u, i) => {
-                    const initials = (u.name ?? "?").split(" ").map((p: string) => p[0]).join("").slice(0, 2).toUpperCase();
-                    const maxOpen = Math.max(...activeUsers.map(a => a.open), 1);
-                    const pct = Math.round((u.open / maxOpen) * 100);
-                    return (
-                      <div key={i} className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-full bg-[#0747A6] text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
-                          {initials}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">{u.name}</span>
-                            <span className="text-xs tabular-nums text-slate-500 ml-2">{u.open} open</span>
-                          </div>
-                          <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full bg-[#0052CC]" style={{ width: `${pct}%` }} />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {/* All team members */}
-              {users.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                  <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-2">All Members ({users.length})</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {users.slice(0, 8).map((u: any) => (
-                      <div key={u.id} title={u.name}
-                        className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold flex items-center justify-center">
-                        {(u.name ?? "?").split(" ").map((p: string) => p[0]).join("").slice(0, 2).toUpperCase()}
-                      </div>
-                    ))}
-                    {users.length > 8 && (
-                      <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-500 text-[10px] font-bold flex items-center justify-center">
-                        +{users.length - 8}
-                      </div>
-                    )}
+              <div className="flex-1 px-3 py-3 space-y-2" style={{ maxHeight: 320, overflowY: "auto" }}>
+                {ticketsLoading ? (
+                  [...Array(3)].map((_, i) => <div key={i} className="h-12 animate-pulse bg-slate-100 dark:bg-slate-800 rounded-lg" />)
+                ) : escalations.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <TrendingUp className="w-6 h-6 text-emerald-400 mb-2" />
+                    <p className="text-xs text-slate-400">No blockers — things are on track</p>
                   </div>
+                ) : (
+                  escalations.map(ticket => (
+                    <button key={ticket.id}
+                      onClick={() => router.push(`/tickets/${ticket.ticketKey ?? ticket.id}`)}
+                      className="w-full flex items-start gap-3 px-3 py-2.5 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors text-left">
+                      <PriorityDot priority={ticket.priority} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">{ticket.title}</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[10px] font-mono text-slate-400">{ticket.ticketKey}</span>
+                          {ticket.slaBreached && (
+                            <span className="text-[10px] bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 px-1 rounded font-semibold">SLA</span>
+                          )}
+                          <StatusLozenge status={ticket.status} />
+                        </div>
+                      </div>
+                      <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 mt-0.5" />
+                    </button>
+                  ))
+                )}
+              </div>
+              {escalations.length > 0 && (
+                <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-800">
+                  <button onClick={() => router.push("/tickets?priority=CRITICAL")}
+                    className="text-xs text-[#0052CC] hover:underline flex items-center gap-1">
+                    View all critical <ArrowUpRight className="w-3 h-3" />
+                  </button>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Row 2 — Top Categories (1/3) | Activity Feed (1/3) | Escalations (1/3) */}
+          {/* Row 2 — Top Categories (1/3) | Activity Feed (1/3) | Active Users (1/3) */}
           <div className="grid grid-cols-3 gap-5">
 
             {/* Top Impact Areas */}
@@ -467,47 +461,56 @@ export default function ClientDashboard() {
               </div>
             </div>
 
-            {/* Current Blockers / Escalations */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col">
-              <div className="px-4 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
-                <Flame className="w-3.5 h-3.5 text-red-500" />
-                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Blockers & Escalations</h2>
+            {/* Top Active Users */}
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Active Users</h2>
+                <Users className="w-4 h-4 text-slate-400" />
               </div>
-              <div className="flex-1 px-3 py-3 space-y-2" style={{ maxHeight: 320, overflowY: "auto" }}>
-                {ticketsLoading ? (
-                  [...Array(3)].map((_, i) => <div key={i} className="h-12 animate-pulse bg-slate-100 dark:bg-slate-800 rounded-lg" />)
-                ) : escalations.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-center">
-                    <TrendingUp className="w-6 h-6 text-emerald-400 mb-2" />
-                    <p className="text-xs text-slate-400">No blockers — things are on track</p>
-                  </div>
-                ) : (
-                  escalations.map(ticket => (
-                    <button key={ticket.id}
-                      onClick={() => router.push(`/tickets/${ticket.ticketKey ?? ticket.id}`)}
-                      className="w-full flex items-start gap-3 px-3 py-2.5 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors text-left">
-                      <PriorityDot priority={ticket.priority} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">{ticket.title}</p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="text-[10px] font-mono text-slate-400">{ticket.ticketKey}</span>
-                          {ticket.slaBreached && (
-                            <span className="text-[10px] bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 px-1 rounded font-semibold">SLA</span>
-                          )}
-                          <StatusLozenge status={ticket.status} />
+              {activeUsers.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-6">No user data</p>
+              ) : (
+                <div className="space-y-3">
+                  {activeUsers.map((u, i) => {
+                    const initials = (u.name ?? "?").split(" ").map((p: string) => p[0]).join("").slice(0, 2).toUpperCase();
+                    const maxOpen = Math.max(...activeUsers.map(a => a.open), 1);
+                    const pct = Math.round((u.open / maxOpen) * 100);
+                    return (
+                      <div key={i} className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-full bg-[#0747A6] text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+                          {initials}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">{u.name}</span>
+                            <span className="text-xs tabular-nums text-slate-500 ml-2">{u.open} open</span>
+                          </div>
+                          <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full bg-[#0052CC]" style={{ width: `${pct}%` }} />
+                          </div>
                         </div>
                       </div>
-                      <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 mt-0.5" />
-                    </button>
-                  ))
-                )}
-              </div>
-              {escalations.length > 0 && (
-                <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-800">
-                  <button onClick={() => router.push("/tickets?priority=CRITICAL")}
-                    className="text-xs text-[#0052CC] hover:underline flex items-center gap-1">
-                    View all critical <ArrowUpRight className="w-3 h-3" />
-                  </button>
+                    );
+                  })}
+                </div>
+              )}
+              {/* All team members */}
+              {users.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-2">All Members ({users.length})</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {users.slice(0, 8).map((u: any) => (
+                      <div key={u.id} title={u.name}
+                        className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold flex items-center justify-center">
+                        {(u.name ?? "?").split(" ").map((p: string) => p[0]).join("").slice(0, 2).toUpperCase()}
+                      </div>
+                    ))}
+                    {users.length > 8 && (
+                      <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-500 text-[10px] font-bold flex items-center justify-center">
+                        +{users.length - 8}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
