@@ -205,10 +205,14 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       console.error("AI classify failed:", e);
       if (diagnostic && aiConfig.resolutionCopilot) {
-        await prisma.issue.update({
-          where: { id: ticket.id },
-          data: { aiSummary: encodeCopilotSummary(null, diagnostic) },
-        });
+        try {
+          await prisma.issue.update({
+            where: { id: ticket.id },
+            data: { aiSummary: encodeCopilotSummary(null, diagnostic) },
+          });
+        } catch (diagnosticError) {
+          console.error("Failed to save copilot diagnostic fallback:", diagnosticError);
+        }
       }
     }
 
